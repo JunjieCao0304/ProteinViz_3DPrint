@@ -1,0 +1,2023 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebVMD — molecular visualization</title>
+<style>
+  :root{
+    --bg:#eef1f6;--bg2:#e4e8ef;--panel:#ffffff;--ink:#1d2530;--ink-dim:#5b6675;
+    --ink-faint:#8a94a4;--grid:#d6dce5;--line:#e3e8f0;
+    --accent:#2f6fb0;--accent-soft:#e8f1fa;--ok:#1f9d6b;--warn:#c08316;--bad:#cf4444;
+    --accent-bg:#eaf2fb;--accent2:#1f9d6b;--danger:#cf4444;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:13px;-webkit-font-smoothing:antialiased}
+  #viewport{position:fixed;inset:0;right:340px}
+  canvas{display:block}
+
+  /* ---- top toolbar ---- */
+  #toolbar{position:fixed;top:0;left:0;right:340px;height:52px;background:var(--panel);
+    border-bottom:1px solid var(--grid);display:flex;align-items:center;gap:14px;
+    padding:0 18px;z-index:20}
+  .logo{font-weight:700;font-size:15px;letter-spacing:-.01em}
+  .logo span{color:var(--accent)}
+  .tag{font-size:10px;color:var(--ink-faint);border:1px solid var(--grid);border-radius:20px;
+    padding:2px 9px;letter-spacing:.04em}
+  .tbtn{border:1px solid var(--grid);background:var(--panel);border-radius:8px;
+    padding:7px 13px;font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;
+    color:var(--ink);display:inline-flex;align-items:center;gap:6px;transition:.13s}
+  .tbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .tbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tbtn.primary:hover{background:#285f97}
+  .spacer{flex:1}
+
+  /* ---- right inspector ---- */
+  #inspector{position:fixed;top:0;right:0;width:340px;height:100%;background:var(--panel);
+    border-left:1px solid var(--grid);display:flex;flex-direction:column;z-index:20}
+  .insp-head{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+  .insp-head h2{font-size:13px;font-weight:600;letter-spacing:.02em}
+  .insp-head .muted{font-size:11px;color:var(--ink-faint);margin-top:2px}
+  .insp-body{flex:1;overflow-y:auto;padding:14px 16px}
+  .section{margin-bottom:20px}
+  .section>.lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--ink-faint);font-weight:600;margin-bottom:9px;display:flex;
+    justify-content:space-between;align-items:center}
+
+  /* toolbar view tabs */
+  .viewtabs{display:flex;gap:2px;background:var(--bg2);border-radius:9px;padding:3px}
+  .vtab{border:none;background:transparent;color:var(--ink-faint);font:inherit;font-size:12.5px;
+    font-weight:600;padding:6px 16px;border-radius:7px;cursor:pointer;transition:all .15s}
+  .vtab:hover{color:var(--ink)}
+  .vtab.on{background:var(--panel);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  /* measurement kind selector — icon cards */
+  .mkind{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+  .mkind button{display:flex;flex-direction:column;align-items:center;gap:6px;
+    border:1.5px solid var(--grid);background:var(--panel);border-radius:11px;padding:12px 4px 9px;
+    cursor:pointer;color:var(--ink-faint);transition:all .15s;font:inherit;font-size:11px;font-weight:600}
+  .mkind button svg{stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .mkind button svg circle{fill:currentColor;stroke:none}
+  .mkind button:hover{border-color:var(--accent-soft);color:var(--ink)}
+  .mkind button.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+  .mkind button.on svg{stroke:var(--accent)}
+
+  /* link-style buttons (no grey box) */
+  .mrow{display:flex;gap:14px;align-items:center;margin-top:10px;padding-left:2px}
+  .linkbtn{border:none;background:none;color:var(--accent);font:inherit;font-size:12px;font-weight:600;
+    cursor:pointer;padding:2px 0}
+  .linkbtn:hover{text-decoration:underline}
+  .linkbtn.danger{color:var(--danger)}
+
+  /* environment card */
+  .env-card{border:1px solid var(--grid);border-radius:11px;padding:12px;background:var(--panel)}
+  .env-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .env-row input{flex:0 0 auto}
+  .env-row #env-sel{flex:1 1 90px;min-width:80px}
+  .env-within{font-size:11px;color:var(--ink-faint)}
+  .env-dist{width:42px!important;text-align:center}
+  .env-ang{font-size:12px;color:var(--ink-faint)}
+
+  /* print view intro */
+  .print-intro{margin-bottom:18px}
+  .print-intro-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:4px}
+  .print-intro-sub{font-size:12px;color:var(--ink-faint);line-height:1.5}
+
+  /* measurement result rows */
+  .mitem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;
+    border:1px solid var(--grid);border-radius:9px;margin-bottom:6px;background:var(--panel);font-size:12px}
+  .mitem .mtag{color:var(--ink-faint);font-size:11px}
+  .mitem .mval{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .mempty{font-size:12px;color:var(--ink-faint);text-align:center;padding:14px 8px;
+    border:1.5px dashed var(--grid);border-radius:10px}
+
+  /* prominent surface-compute overlay */
+  #surf-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(238,241,246,.72);backdrop-filter:blur(3px);z-index:50}
+  #surf-overlay .card{background:var(--panel);border:1px solid var(--grid);border-radius:16px;
+    padding:26px 30px;box-shadow:0 12px 40px rgba(0,0,0,.16);text-align:center;min-width:280px}
+  #surf-overlay .stitle{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px}
+  #surf-overlay .sstage{font-size:12px;color:var(--ink-faint);margin-bottom:16px;min-height:16px}
+  #surf-bar{height:8px;background:var(--bg2);border-radius:5px;overflow:hidden}
+  #surf-bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));
+    border-radius:5px;transition:width .15s}
+  #surf-pct{font-size:11px;color:var(--ink-faint);margin-top:8px;font-variant-numeric:tabular-nums}
+
+  .view-pane{animation:fadein .2s}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+
+  /* docking */
+  .dock-hint{font-size:11px;color:var(--ink-faint);line-height:1.5;margin-top:8px;
+    padding:8px 10px;background:var(--accent-bg);border-radius:8px}
+  .dock-gesture{display:flex;align-items:center;gap:6px;margin-top:8px}
+  .dock-gesture span{font-size:11px;color:var(--ink-faint)}
+  .gbtn{flex:1;border:1px solid var(--grid);background:var(--panel);border-radius:7px;
+    padding:6px 0;font:inherit;font-size:12px;font-weight:600;color:var(--ink-dim);cursor:pointer;transition:all .12s}
+  .gbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .gbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .dock-nudge{margin-top:8px}
+  .dock-axis{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--ink-faint)}
+  .dock-axis .linkbtn{border:1px solid var(--grid);border-radius:6px;padding:3px 10px;color:var(--ink)}
+  .dock-axis .linkbtn:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+  .dock-step{margin-left:auto;color:var(--ink-faint)}
+  .dock-check{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-dim);margin-top:8px;cursor:pointer}
+  .dock-check input{width:auto;accent-color:var(--accent)}
+  .dock-toggles{display:flex;gap:16px}
+  .dock-stat{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;
+    border-radius:8px;margin-bottom:5px;font-size:12px;font-weight:600}
+  .dock-stat span:last-child{font-variant-numeric:tabular-nums}
+  .dock-stat.clash{background:#fbeaea;color:#cf4444}
+  .dock-stat.hb{background:#e8f6f0;color:#1f9d6b}
+  .dock-stat.salt{background:#efeafb;color:#7048c4}
+  .dock-stat.hydro{background:#faf4e0;color:#9a7d12}
+
+  /* representation cards */
+  .rep{border:1px solid var(--grid);border-radius:10px;margin-bottom:9px;overflow:hidden;
+    background:var(--panel);transition:.13s}
+  .rep.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .rep-top{display:flex;align-items:center;gap:9px;padding:10px 12px;cursor:pointer}
+  .rep-top .eye{width:18px;height:18px;flex:none;border-radius:5px;border:1.5px solid var(--grid);
+    display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--ink-dim)}
+  .rep.on .rep-top .eye{background:var(--accent);border-color:var(--accent);color:#fff}
+  .rep-name{flex:1;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rep-name small{color:var(--ink-faint);font-weight:400}
+  .rep-del{color:var(--ink-faint);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px}
+  .rep-del:hover{color:var(--bad)}
+  .rep-body{padding:0 12px 12px;display:none;border-top:1px solid var(--line)}
+  .rep.expanded .rep-body{display:block}
+  .field{margin-top:10px}
+  .field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-faint);margin-bottom:4px}
+  select,input[type=text]{width:100%;font-family:var(--mono);font-size:12px;padding:7px 9px;
+    border:1px solid var(--grid);border-radius:7px;background:var(--panel);color:var(--ink)}
+  input[type=text]:focus,select:focus{outline:none;border-color:var(--accent)}
+  input.bad{border-color:var(--bad);background:#fdf3f3}
+  .selstatus{font-size:10px;color:var(--ink-faint);margin-top:4px}
+  .selstatus.err{color:var(--bad)}
+  .sel-row{display:flex;gap:6px}
+  .sel-row .sel-input{flex:1}
+  .pickbtn{flex:0 0 auto;border:1px solid var(--grid);background:var(--panel);border-radius:7px;
+    padding:0 12px;font:inherit;font-size:11px;font-weight:600;color:var(--ink-dim);cursor:pointer;transition:all .15s}
+  .pickbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .pickbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pickmode{display:flex;align-items:center;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .pickmode span{font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
+  .pickmode .pm{border:1px solid var(--grid);background:var(--panel);border-radius:6px;
+    padding:3px 9px;font:inherit;font-size:11px;color:var(--ink-dim);cursor:pointer;transition:all .12s}
+  .pickmode .pm:hover{border-color:var(--accent);color:var(--accent)}
+  .pickmode .pm.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .addrep{width:100%;border:1.5px dashed var(--grid);background:var(--panel);border-radius:9px;
+    padding:9px;font-family:var(--sans);font-size:12px;color:var(--ink-dim);cursor:pointer;font-weight:500}
+  .addrep:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+  .drop{border:1.5px dashed var(--grid);border-radius:10px;padding:20px 14px;text-align:center;
+    color:var(--ink-dim);cursor:pointer;transition:.13s;font-size:12px}
+  .drop:hover,.drop.hot{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .drop b{color:var(--ink);display:block;margin-bottom:2px}
+  input[type=file]{display:none}
+
+  .stat{display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid var(--line)}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{font-family:var(--mono);font-weight:600}
+  .slider{width:100%;accent-color:var(--accent)}
+  .row-inline{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-dim)}
+
+  /* color legend for ESP/spectrum */
+  .legend{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--ink-faint);margin-top:6px}
+  .grad{height:9px;flex:1;border-radius:3px}
+
+  #hud{position:fixed;left:18px;bottom:16px;z-index:15;font-size:11px;color:var(--ink-dim);
+    background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:8px 13px;
+    box-shadow:0 2px 10px rgba(20,30,50,.06)}
+  #hud b{color:var(--ink)}
+  #pick{position:fixed;left:18px;top:64px;z-index:15;font-size:11px;font-family:var(--mono);
+    background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:8px 12px;
+    box-shadow:0 2px 10px rgba(20,30,50,.06);display:none;max-width:260px}
+  #pick b{color:var(--accent)}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--bad);
+    color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;display:none;z-index:40}
+  .kbd{font-family:var(--mono);font-size:10px;background:var(--bg2);border:1px solid var(--grid);
+    border-radius:4px;padding:1px 5px}
+  .vrtag{font-size:9px;color:var(--ok);font-weight:600}
+</style>
+</head>
+<body>
+
+<div id="viewport"></div>
+
+<div id="toolbar">
+  <div class="logo">Web<span>VMD</span></div>
+  <div class="viewtabs">
+    <button class="vtab on" data-view="viewer">Viewer</button>
+    <button class="vtab" data-view="print">3D Print</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="tbtn" id="t-center">Center</button>
+  <button class="tbtn" id="t-reset">Reset</button>
+  <button class="tbtn" id="t-snap">Snapshot</button>
+  <button class="tbtn" id="t-vr" disabled>Enter VR</button>
+  <button class="tbtn" id="t-binder" disabled title="Load a ligand into the current protein to dock it">+ Binder</button>
+  <button class="tbtn primary" id="t-load">Load structure</button>
+  <input type="file" id="binder-file" accept=".pdb,.ent,.cif,.mmcif,.xyz,.pqr" style="display:none">
+</div>
+
+<div id="inspector">
+  <div class="insp-head">
+    <h2 id="insp-title">Graphical Representations</h2>
+    <div class="muted" id="mol-name">No molecule loaded</div>
+  </div>
+  <div class="insp-body">
+
+   <div class="view-pane" id="view-viewer">
+    <div class="section" id="loadsec">
+      <div class="lbl">Molecule</div>
+      <div class="drop" id="drop">
+        <b>Drop PDB / mmCIF / PQR</b>or click to browse
+        <input type="file" id="file" accept=".pdb,.ent,.cif,.mmcif,.pqr,.xyz,.txt">
+      </div>
+      <button class="tbtn" id="demo" style="width:100%;margin-top:8px;justify-content:center">Load demo structure</button>
+    </div>
+
+    <div class="section">
+      <div class="lbl">Representations <span class="row-inline"><span id="repcount">0</span></span></div>
+      <div id="replist"></div>
+      <button class="addrep" id="addrep">+ Create Representation</button>
+    </div>
+
+    <div class="section">
+      <div class="lbl">Global</div>
+      <div class="field">
+        <label>Background</label>
+        <select id="bgsel">
+          <option value="#eef1f6" selected>Light grey (default)</option>
+          <option value="#ffffff">White</option>
+          <option value="#f3efe6">Warm paper</option>
+          <option value="#e8f0ee">Cool mint</option>
+          <option value="#1a1f2b">Dark (not recommended)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Projection</label>
+        <div class="two">
+          <select id="projsel"><option value="persp">Perspective</option><option value="ortho">Orthographic</option></select>
+          <select id="qualsel"><option value="2">Quality: High</option><option value="1">Medium</option><option value="0">Fast</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="measuresec" style="display:none">
+      <div class="lbl">Measure</div>
+      <div class="mkind" id="measure-kind">
+        <button data-k="distance" class="on">
+          <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="5" r="2.5"/><line x1="6.8" y1="17.2" x2="17.2" y2="6.8" stroke-dasharray="2 2"/></svg>
+          <span>Distance</span></button>
+        <button data-k="angle">
+          <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><circle cx="5" cy="5" r="2.5"/><line x1="5" y1="16.5" x2="5" y2="7.5"/><line x1="7" y1="19" x2="16.5" y2="19"/></svg>
+          <span>Angle</span></button>
+        <button data-k="dihedral">
+          <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="4" cy="12" r="2.2"/><circle cx="10" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><circle cx="20" cy="11" r="2.2"/><polyline points="5.6,10.6 8.8,7.6 13.8,16.4 18.4,12.2"/></svg>
+          <span>Dihedral</span></button>
+      </div>
+      <button class="tbtn" id="measure-toggle" style="width:100%;justify-content:center;margin-top:10px">
+        <span id="measure-toggle-label">Start picking atoms</span></button>
+      <div id="measure-list" style="margin-top:10px"></div>
+      <div class="mrow" id="measure-actions" style="display:none">
+        <button class="linkbtn" id="measure-csv">↓ Export CSV</button>
+        <button class="linkbtn danger" id="measure-clear">Clear all</button>
+      </div>
+    </div>
+
+    <div class="section" id="envsec" style="display:none">
+      <div class="lbl">Local environment</div>
+      <div class="env-card">
+        <div class="env-row">
+          <input type="text" id="env-sel" value="ligand" spellcheck="false" placeholder="ligand, resid 50…">
+          <span class="env-within">within</span>
+          <input type="text" id="env-dist" value="5" class="env-dist">
+          <span class="env-ang">Å</span>
+        </div>
+        <button class="tbtn primary" id="env-go" style="width:100%;justify-content:center;margin-top:8px">Highlight pocket</button>
+      </div>
+    </div>
+
+    <div class="section" id="docksec" style="display:none">
+      <div class="lbl">Move &amp; dock</div>
+      <div class="env-card">
+        <div class="field"><label>Move which object</label>
+          <select id="move-object"></select></div>
+        <button class="tbtn" id="dock-toggle" style="width:100%;justify-content:center;margin-top:8px">
+          <span id="dock-toggle-label">Enter move mode</span></button>
+        <div class="dock-gesture" id="dock-gesture" style="display:none">
+          <span>Left-drag:</span>
+          <button class="gbtn on" data-g="rotate">Rotate</button>
+          <button class="gbtn" data-g="move">Move</button>
+        </div>
+        <div class="dock-hint" id="dock-hint" style="display:none">Left-drag does the action above (toggle anytime). <b>Shift</b>+left-drag always moves · <b>scroll</b> moves in depth. Rotation pivots on the center of mass; the other objects stay fixed. Nudge buttons below for exact steps.</div>
+        <div class="dock-nudge" id="dock-nudge" style="display:none">
+          <div class="dock-axis"><span>Move</span>
+            <button class="linkbtn" data-mov="x">±X</button>
+            <button class="linkbtn" data-mov="y">±Y</button>
+            <button class="linkbtn" data-mov="z">±Z</button>
+            <span class="dock-step">±0.5 Å</span>
+          </div>
+          <div class="dock-axis" style="margin-top:6px"><span>Rotate</span>
+            <button class="linkbtn" data-rot="x">X</button>
+            <button class="linkbtn" data-rot="y">Y</button>
+            <button class="linkbtn" data-rot="z">Z</button>
+            <span class="dock-step">±15°</span>
+          </div>
+        </div>
+        <label class="dock-check"><input type="checkbox" id="dock-live"> Live analysis while moving</label>
+        <button class="tbtn primary" id="dock-analyze" style="width:100%;justify-content:center;margin-top:8px">Analyze interactions &amp; clashes</button>
+        <div class="dock-toggles">
+          <label class="dock-check"><input type="checkbox" id="dock-show-clash" checked> Show clashes</label>
+          <label class="dock-check"><input type="checkbox" id="dock-show-inter" checked> Show interactions</label>
+        </div>
+        <div id="dock-result" style="margin-top:8px"></div>
+        <div class="mrow" id="dock-actions">
+          <button class="linkbtn" id="dock-report">↓ Export report</button>
+          <button class="linkbtn danger" id="dock-clear">Clear markers</button>
+        </div>
+      </div>
+    </div>
+    <div class="section" id="statsec" style="display:none">
+      <div class="lbl">Structure info</div>
+      <div class="stat"><span>Atoms</span><span id="s-atoms">—</span></div>
+      <div class="stat"><span>Protein / Hetero</span><span id="s-ph">—</span></div>
+      <div class="stat"><span>Residues</span><span id="s-res">—</span></div>
+      <div class="stat"><span>Chains</span><span id="s-chains">—</span></div>
+      <div class="stat"><span>Extent (Å)</span><span id="s-ext">—</span></div>
+    </div>
+   </div><!-- /view-viewer -->
+
+   <div class="view-pane" id="view-print" style="display:none">
+    <div class="print-intro">
+      <div class="print-intro-title">3D printing export</div>
+      <div class="print-intro-sub">Build a watertight, fused surface from the current representations and export STL / 3MF for printing.</div>
+    </div>
+    <div class="section" id="printsec">
+      <div class="field">
+        <label>Print color scheme</label>
+        <select id="print-colorscheme">
+          <option value="rep">Match on-screen representation</option>
+          <option value="restype">ResType (acidic/basic/polar/nonpolar)</option>
+          <option value="charge">Charge (red −, blue +)</option>
+          <option value="chain">Chain</option>
+          <option value="protein_ligand">Protein vs Ligand (assign each)</option>
+        </select>
+      </div>
+      <div class="two" id="pl-colors" style="display:none">
+        <div class="field"><label>Protein color</label>
+          <input type="color" id="protein-color" value="#9aa6c4" style="width:100%;height:32px;border:1px solid var(--grid);border-radius:7px;background:var(--panel)"></div>
+        <div class="field"><label>Ligand color</label>
+          <input type="color" id="ligand-color" value="#e08a2b" style="width:100%;height:32px;border:1px solid var(--grid);border-radius:7px;background:var(--panel)"></div>
+      </div>
+      <div class="two">
+        <div class="field"><label>Surface type</label>
+          <select id="print-surftype">
+            <option value="vdw">VDW spacefill</option>
+            <option value="sas">Solvent-accessible (SAS)</option>
+            <option value="ses">Solvent-excluded (SES)</option>
+          </select></div>
+        <div class="field"><label>Resolution</label>
+          <select id="print-resolution">
+            <option value="low">Low (fast)</option>
+            <option value="medium" selected>Medium (default)</option>
+            <option value="high">High (smooth)</option>
+            <option value="ultra">Ultra (large files)</option>
+          </select></div>
+      </div>
+      <div class="two">
+        <div class="field"><label>Radius set</label>
+          <select id="print-radiusset">
+            <option value="bondi">Bondi vdW (exact)</option>
+            <option value="united">United-atom (no H)</option>
+          </select></div>
+        <div class="field"><label>Probe radius (Å)</label>
+          <input type="text" id="print-probe" value="1.4"></div>
+      </div>
+      <div class="field">
+        <label>Print size (mm, longest)</label>
+        <input type="text" id="print-size" value="80">
+        <div class="selstatus">Surface is built by marching cubes → one watertight, manifold, fused mesh, Taubin-smoothed. Higher resolution = more triangles = smoother print. Volume measured from the fused solid (overlaps counted once).</div>
+      </div>
+      <div class="field">
+        <label>Export format (multi-color default; bundled in one .zip)</label>
+        <select id="print-format">
+          <option value="all">All (STL + per-color STL + 3MF + report)</option>
+          <option value="stl">STL — geometry only</option>
+          <option value="percolor">Per-color STL set — one file per color</option>
+          <option value="3mf">3MF — single file, true color</option>
+        </select>
+      </div>
+      <button class="tbtn" id="print-orient" style="width:100%;justify-content:center;margin-top:4px">Suggest optimal orientation</button>
+      <div id="orient-result" class="selstatus" style="margin-top:6px"></div>
+      <button class="tbtn primary" id="print-export" style="width:100%;justify-content:center;margin-top:8px">Export for printing</button>
+      <div id="export-stats" class="selstatus" style="margin-top:6px"></div>
+    </div>
+   </div><!-- /view-print -->
+
+  </div>
+</div>
+
+<div id="hud"><b>Rotate</b> drag · <b>Zoom</b> scroll · <b>Pan</b> right-drag · <b>Pick</b> <span class="kbd">click atom</span> · <span class="vrtag" id="vrhud"></span></div>
+<div id="surf-overlay"><div class="card">
+  <div class="stitle">Computing surface</div>
+  <div class="sstage" id="surf-stage">Preparing…</div>
+  <div id="surf-bar"><div></div></div>
+  <div id="surf-pct">0%</div>
+</div></div>
+<div id="pick"></div>
+<div id="toast"></div>
+
+<script type="text/plain" id="mc-tritable">const triTable=[[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,8,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,8,3,9,8,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,2,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,8,3,1,2,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,2,10,0,2,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[2,8,3,2,10,8,10,9,8,-1,-1,-1,-1,-1,-1,-1],[3,11,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,11,2,8,11,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,9,0,2,3,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,11,2,1,9,11,9,8,11,-1,-1,-1,-1,-1,-1,-1],[3,10,1,11,10,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,10,1,0,8,10,8,11,10,-1,-1,-1,-1,-1,-1,-1],[3,9,0,3,11,9,11,10,9,-1,-1,-1,-1,-1,-1,-1],[9,8,10,10,8,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,7,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,3,0,7,3,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,1,9,8,4,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,1,9,4,7,1,7,3,1,-1,-1,-1,-1,-1,-1,-1],[1,2,10,8,4,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,4,7,3,0,4,1,2,10,-1,-1,-1,-1,-1,-1,-1],[9,2,10,9,0,2,8,4,7,-1,-1,-1,-1,-1,-1,-1],[2,10,9,2,9,7,2,7,3,7,9,4,-1,-1,-1,-1],[8,4,7,3,11,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[11,4,7,11,2,4,2,0,4,-1,-1,-1,-1,-1,-1,-1],[9,0,1,8,4,7,2,3,11,-1,-1,-1,-1,-1,-1,-1],[4,7,11,9,4,11,9,11,2,9,2,1,-1,-1,-1,-1],[3,10,1,3,11,10,7,8,4,-1,-1,-1,-1,-1,-1,-1],[1,11,10,1,4,11,1,0,4,7,11,4,-1,-1,-1,-1],[4,7,8,9,0,11,9,11,10,11,0,3,-1,-1,-1,-1],[4,7,11,4,11,9,9,11,10,-1,-1,-1,-1,-1,-1,-1],[9,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,5,4,0,8,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,5,4,1,5,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[8,5,4,8,3,5,3,1,5,-1,-1,-1,-1,-1,-1,-1],[1,2,10,9,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,0,8,1,2,10,4,9,5,-1,-1,-1,-1,-1,-1,-1],[5,2,10,5,4,2,4,0,2,-1,-1,-1,-1,-1,-1,-1],[2,10,5,3,2,5,3,5,4,3,4,8,-1,-1,-1,-1],[9,5,4,2,3,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,11,2,0,8,11,4,9,5,-1,-1,-1,-1,-1,-1,-1],[0,5,4,0,1,5,2,3,11,-1,-1,-1,-1,-1,-1,-1],[2,1,5,2,5,8,2,8,11,4,8,5,-1,-1,-1,-1],[10,3,11,10,1,3,9,5,4,-1,-1,-1,-1,-1,-1,-1],[4,9,5,0,8,1,8,10,1,8,11,10,-1,-1,-1,-1],[5,4,0,5,0,11,5,11,10,11,0,3,-1,-1,-1,-1],[5,4,8,5,8,10,10,8,11,-1,-1,-1,-1,-1,-1,-1],[9,7,8,5,7,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,3,0,9,5,3,5,7,3,-1,-1,-1,-1,-1,-1,-1],[0,7,8,0,1,7,1,5,7,-1,-1,-1,-1,-1,-1,-1],[1,5,3,3,5,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,7,8,9,5,7,10,1,2,-1,-1,-1,-1,-1,-1,-1],[10,1,2,9,5,0,5,3,0,5,7,3,-1,-1,-1,-1],[8,0,2,8,2,5,8,5,7,10,5,2,-1,-1,-1,-1],[2,10,5,2,5,3,3,5,7,-1,-1,-1,-1,-1,-1,-1],[7,9,5,7,8,9,3,11,2,-1,-1,-1,-1,-1,-1,-1],[9,5,7,9,7,2,9,2,0,2,7,11,-1,-1,-1,-1],[2,3,11,0,1,8,1,7,8,1,5,7,-1,-1,-1,-1],[11,2,1,11,1,7,7,1,5,-1,-1,-1,-1,-1,-1,-1],[9,5,8,8,5,7,10,1,3,10,3,11,-1,-1,-1,-1],[5,7,0,5,0,9,7,11,0,1,0,10,11,10,0,-1],[11,10,0,11,0,3,10,5,0,8,0,7,5,7,0,-1],[11,10,5,7,11,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[10,6,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,8,3,5,10,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,0,1,5,10,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,8,3,1,9,8,5,10,6,-1,-1,-1,-1,-1,-1,-1],[1,6,5,2,6,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,6,5,1,2,6,3,0,8,-1,-1,-1,-1,-1,-1,-1],[9,6,5,9,0,6,0,2,6,-1,-1,-1,-1,-1,-1,-1],[5,9,8,5,8,2,5,2,6,3,2,8,-1,-1,-1,-1],[2,3,11,10,6,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[11,0,8,11,2,0,10,6,5,-1,-1,-1,-1,-1,-1,-1],[0,1,9,2,3,11,5,10,6,-1,-1,-1,-1,-1,-1,-1],[5,10,6,1,9,2,9,11,2,9,8,11,-1,-1,-1,-1],[6,3,11,6,5,3,5,1,3,-1,-1,-1,-1,-1,-1,-1],[0,8,11,0,11,5,0,5,1,5,11,6,-1,-1,-1,-1],[3,11,6,0,3,6,0,6,5,0,5,9,-1,-1,-1,-1],[6,5,9,6,9,11,11,9,8,-1,-1,-1,-1,-1,-1,-1],[5,10,6,4,7,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,3,0,4,7,3,6,5,10,-1,-1,-1,-1,-1,-1,-1],[1,9,0,5,10,6,8,4,7,-1,-1,-1,-1,-1,-1,-1],[10,6,5,1,9,7,1,7,3,7,9,4,-1,-1,-1,-1],[6,1,2,6,5,1,4,7,8,-1,-1,-1,-1,-1,-1,-1],[1,2,5,5,2,6,3,0,4,3,4,7,-1,-1,-1,-1],[8,4,7,9,0,5,0,6,5,0,2,6,-1,-1,-1,-1],[7,3,9,7,9,4,3,2,9,5,9,6,2,6,9,-1],[3,11,2,7,8,4,10,6,5,-1,-1,-1,-1,-1,-1,-1],[5,10,6,4,7,2,4,2,0,2,7,11,-1,-1,-1,-1],[0,1,9,4,7,8,2,3,11,5,10,6,-1,-1,-1,-1],[9,2,1,9,11,2,9,4,11,7,11,4,5,10,6,-1],[8,4,7,3,11,5,3,5,1,5,11,6,-1,-1,-1,-1],[5,1,11,5,11,6,1,0,11,7,11,4,0,4,11,-1],[0,5,9,0,6,5,0,3,6,11,6,3,8,4,7,-1],[6,5,9,6,9,11,4,7,9,7,11,9,-1,-1,-1,-1],[10,4,9,6,4,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,10,6,4,9,10,0,8,3,-1,-1,-1,-1,-1,-1,-1],[10,0,1,10,6,0,6,4,0,-1,-1,-1,-1,-1,-1,-1],[8,3,1,8,1,6,8,6,4,6,1,10,-1,-1,-1,-1],[1,4,9,1,2,4,2,6,4,-1,-1,-1,-1,-1,-1,-1],[3,0,8,1,2,9,2,4,9,2,6,4,-1,-1,-1,-1],[0,2,4,4,2,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[8,3,2,8,2,4,4,2,6,-1,-1,-1,-1,-1,-1,-1],[10,4,9,10,6,4,11,2,3,-1,-1,-1,-1,-1,-1,-1],[0,8,2,2,8,11,4,9,10,4,10,6,-1,-1,-1,-1],[3,11,2,0,1,6,0,6,4,6,1,10,-1,-1,-1,-1],[6,4,1,6,1,10,4,8,1,2,1,11,8,11,1,-1],[9,6,4,9,3,6,9,1,3,11,6,3,-1,-1,-1,-1],[8,11,1,8,1,0,11,6,1,9,1,4,6,4,1,-1],[3,11,6,3,6,0,0,6,4,-1,-1,-1,-1,-1,-1,-1],[6,4,8,11,6,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[7,10,6,7,8,10,8,9,10,-1,-1,-1,-1,-1,-1,-1],[0,7,3,0,10,7,0,9,10,6,7,10,-1,-1,-1,-1],[10,6,7,1,10,7,1,7,8,1,8,0,-1,-1,-1,-1],[10,6,7,10,7,1,1,7,3,-1,-1,-1,-1,-1,-1,-1],[1,2,6,1,6,8,1,8,9,8,6,7,-1,-1,-1,-1],[2,6,9,2,9,1,6,7,9,0,9,3,7,3,9,-1],[7,8,0,7,0,6,6,0,2,-1,-1,-1,-1,-1,-1,-1],[7,3,2,6,7,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[2,3,11,10,6,8,10,8,9,8,6,7,-1,-1,-1,-1],[2,0,7,2,7,11,0,9,7,6,7,10,9,10,7,-1],[1,8,0,1,7,8,1,10,7,6,7,10,2,3,11,-1],[11,2,1,11,1,7,10,6,1,6,7,1,-1,-1,-1,-1],[8,9,6,8,6,7,9,1,6,11,6,3,1,3,6,-1],[0,9,1,11,6,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[7,8,0,7,0,6,3,11,0,11,6,0,-1,-1,-1,-1],[7,11,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[7,6,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,0,8,11,7,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,1,9,11,7,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[8,1,9,8,3,1,11,7,6,-1,-1,-1,-1,-1,-1,-1],[10,1,2,6,11,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,2,10,3,0,8,6,11,7,-1,-1,-1,-1,-1,-1,-1],[2,9,0,2,10,9,6,11,7,-1,-1,-1,-1,-1,-1,-1],[6,11,7,2,10,3,10,8,3,10,9,8,-1,-1,-1,-1],[7,2,3,6,2,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[7,0,8,7,6,0,6,2,0,-1,-1,-1,-1,-1,-1,-1],[2,7,6,2,3,7,0,1,9,-1,-1,-1,-1,-1,-1,-1],[1,6,2,1,8,6,1,9,8,8,7,6,-1,-1,-1,-1],[10,7,6,10,1,7,1,3,7,-1,-1,-1,-1,-1,-1,-1],[10,7,6,1,7,10,1,8,7,1,0,8,-1,-1,-1,-1],[0,3,7,0,7,10,0,10,9,6,10,7,-1,-1,-1,-1],[7,6,10,7,10,8,8,10,9,-1,-1,-1,-1,-1,-1,-1],[6,8,4,11,8,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,6,11,3,0,6,0,4,6,-1,-1,-1,-1,-1,-1,-1],[8,6,11,8,4,6,9,0,1,-1,-1,-1,-1,-1,-1,-1],[9,4,6,9,6,3,9,3,1,11,3,6,-1,-1,-1,-1],[6,8,4,6,11,8,2,10,1,-1,-1,-1,-1,-1,-1,-1],[1,2,10,3,0,11,0,6,11,0,4,6,-1,-1,-1,-1],[4,11,8,4,6,11,0,2,9,2,10,9,-1,-1,-1,-1],[10,9,3,10,3,2,9,4,3,11,3,6,4,6,3,-1],[8,2,3,8,4,2,4,6,2,-1,-1,-1,-1,-1,-1,-1],[0,4,2,4,6,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,9,0,2,3,4,2,4,6,4,3,8,-1,-1,-1,-1],[1,9,4,1,4,2,2,4,6,-1,-1,-1,-1,-1,-1,-1],[8,1,3,8,6,1,8,4,6,6,10,1,-1,-1,-1,-1],[10,1,0,10,0,6,6,0,4,-1,-1,-1,-1,-1,-1,-1],[4,6,3,4,3,8,6,10,3,0,3,9,10,9,3,-1],[10,9,4,6,10,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,9,5,7,6,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,8,3,4,9,5,11,7,6,-1,-1,-1,-1,-1,-1,-1],[5,0,1,5,4,0,7,6,11,-1,-1,-1,-1,-1,-1,-1],[11,7,6,8,3,4,3,5,4,3,1,5,-1,-1,-1,-1],[9,5,4,10,1,2,7,6,11,-1,-1,-1,-1,-1,-1,-1],[6,11,7,1,2,10,0,8,3,4,9,5,-1,-1,-1,-1],[7,6,11,5,4,10,4,2,10,4,0,2,-1,-1,-1,-1],[3,4,8,3,5,4,3,2,5,10,5,2,11,7,6,-1],[7,2,3,7,6,2,5,4,9,-1,-1,-1,-1,-1,-1,-1],[9,5,4,0,8,6,0,6,2,6,8,7,-1,-1,-1,-1],[3,6,2,3,7,6,1,5,0,5,4,0,-1,-1,-1,-1],[6,2,8,6,8,7,2,1,8,4,8,5,1,5,8,-1],[9,5,4,10,1,6,1,7,6,1,3,7,-1,-1,-1,-1],[1,6,10,1,7,6,1,0,7,8,7,0,9,5,4,-1],[4,0,10,4,10,5,0,3,10,6,10,7,3,7,10,-1],[7,6,10,7,10,8,5,4,10,4,8,10,-1,-1,-1,-1],[6,9,5,6,11,9,11,8,9,-1,-1,-1,-1,-1,-1,-1],[3,6,11,0,6,3,0,5,6,0,9,5,-1,-1,-1,-1],[0,11,8,0,5,11,0,1,5,5,6,11,-1,-1,-1,-1],[6,11,3,6,3,5,5,3,1,-1,-1,-1,-1,-1,-1,-1],[1,2,10,9,5,11,9,11,8,11,5,6,-1,-1,-1,-1],[0,11,3,0,6,11,0,9,6,5,6,9,1,2,10,-1],[11,8,5,11,5,6,8,0,5,10,5,2,0,2,5,-1],[6,11,3,6,3,5,2,10,3,10,5,3,-1,-1,-1,-1],[5,8,9,5,2,8,5,6,2,3,8,2,-1,-1,-1,-1],[9,5,6,9,6,0,0,6,2,-1,-1,-1,-1,-1,-1,-1],[1,5,8,1,8,0,5,6,8,3,8,2,6,2,8,-1],[1,5,6,2,1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,3,6,1,6,10,3,8,6,5,6,9,8,9,6,-1],[10,1,0,10,0,6,9,5,0,5,6,0,-1,-1,-1,-1],[0,3,8,5,6,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[10,5,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[11,5,10,7,5,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[11,5,10,11,7,5,8,3,0,-1,-1,-1,-1,-1,-1,-1],[5,11,7,5,10,11,1,9,0,-1,-1,-1,-1,-1,-1,-1],[10,7,5,10,11,7,9,8,1,8,3,1,-1,-1,-1,-1],[11,1,2,11,7,1,7,5,1,-1,-1,-1,-1,-1,-1,-1],[0,8,3,1,2,7,1,7,5,7,2,11,-1,-1,-1,-1],[9,7,5,9,2,7,9,0,2,2,11,7,-1,-1,-1,-1],[7,5,2,7,2,11,5,9,2,3,2,8,9,8,2,-1],[2,5,10,2,3,5,3,7,5,-1,-1,-1,-1,-1,-1,-1],[8,2,0,8,5,2,8,7,5,10,2,5,-1,-1,-1,-1],[9,0,1,5,10,3,5,3,7,3,10,2,-1,-1,-1,-1],[9,8,2,9,2,1,8,7,2,10,2,5,7,5,2,-1],[1,3,5,3,7,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,8,7,0,7,1,1,7,5,-1,-1,-1,-1,-1,-1,-1],[9,0,3,9,3,5,5,3,7,-1,-1,-1,-1,-1,-1,-1],[9,8,7,5,9,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[5,8,4,5,10,8,10,11,8,-1,-1,-1,-1,-1,-1,-1],[5,0,4,5,11,0,5,10,11,11,3,0,-1,-1,-1,-1],[0,1,9,8,4,10,8,10,11,10,4,5,-1,-1,-1,-1],[10,11,4,10,4,5,11,3,4,9,4,1,3,1,4,-1],[2,5,1,2,8,5,2,11,8,4,5,8,-1,-1,-1,-1],[0,4,11,0,11,3,4,5,11,2,11,1,5,1,11,-1],[0,2,5,0,5,9,2,11,5,4,5,8,11,8,5,-1],[9,4,5,2,11,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[2,5,10,3,5,2,3,4,5,3,8,4,-1,-1,-1,-1],[5,10,2,5,2,4,4,2,0,-1,-1,-1,-1,-1,-1,-1],[3,10,2,3,5,10,3,8,5,4,5,8,0,1,9,-1],[5,10,2,5,2,4,1,9,2,9,4,2,-1,-1,-1,-1],[8,4,5,8,5,3,3,5,1,-1,-1,-1,-1,-1,-1,-1],[0,4,5,1,0,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[8,4,5,8,5,3,9,0,5,0,3,5,-1,-1,-1,-1],[9,4,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,11,7,4,9,11,9,10,11,-1,-1,-1,-1,-1,-1,-1],[0,8,3,4,9,7,9,11,7,9,10,11,-1,-1,-1,-1],[1,10,11,1,11,4,1,4,0,7,4,11,-1,-1,-1,-1],[3,1,4,3,4,8,1,10,4,7,4,11,10,11,4,-1],[4,11,7,9,11,4,9,2,11,9,1,2,-1,-1,-1,-1],[9,7,4,9,11,7,9,1,11,2,11,1,0,8,3,-1],[11,7,4,11,4,2,2,4,0,-1,-1,-1,-1,-1,-1,-1],[11,7,4,11,4,2,8,3,4,3,2,4,-1,-1,-1,-1],[2,9,10,2,7,9,2,3,7,7,4,9,-1,-1,-1,-1],[9,10,7,9,7,4,10,2,7,8,7,0,2,0,7,-1],[3,7,10,3,10,2,7,4,10,1,10,0,4,0,10,-1],[1,10,2,8,7,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,9,1,4,1,7,7,1,3,-1,-1,-1,-1,-1,-1,-1],[4,9,1,4,1,7,0,8,1,8,7,1,-1,-1,-1,-1],[4,0,3,7,4,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[4,8,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[9,10,8,10,11,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,0,9,3,9,11,11,9,10,-1,-1,-1,-1,-1,-1,-1],[0,1,10,0,10,8,8,10,11,-1,-1,-1,-1,-1,-1,-1],[3,1,10,11,3,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,2,11,1,11,9,9,11,8,-1,-1,-1,-1,-1,-1,-1],[3,0,9,3,9,11,1,2,9,2,11,9,-1,-1,-1,-1],[0,2,11,8,0,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[3,2,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[2,3,8,2,8,10,10,8,9,-1,-1,-1,-1,-1,-1,-1],[9,10,2,0,9,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[2,3,8,2,8,10,0,1,8,1,10,8,-1,-1,-1,-1],[1,10,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[1,3,8,9,1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,9,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[0,3,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]];</script>
+<script type="importmap">
+{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js" }}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================ chem data
+const VDW={H:1.20,C:1.70,N:1.55,O:1.52,S:1.80,P:1.80,F:1.47,CL:1.75,BR:1.85,I:1.98,
+  FE:1.80,ZN:1.39,MG:1.73,CA:2.31,NA:2.27,K:2.75,MN:1.79,CU:1.40,SE:1.90,DEFAULT:1.6};
+const CPK={H:0xffffff,C:0x2b2b2b,N:0x3050f8,O:0xff0d0d,S:0xe6c53c,P:0xff8000,F:0x90e050,
+  CL:0x1ff01f,BR:0xa62929,I:0x940094,FE:0xe06633,ZN:0x7d80b0,DEFAULT:0xff1493};
+// "Name" coloring (VMD default) ~ element-ish but C is cyan-ish in VMD; keep CPK-like but lighter for light bg
+const NAMECOL={C:0x33a3a3,N:0x2233dd,O:0xdd2222,S:0xdaddd0,H:0xd8d8d8,DEFAULT:0x888888};
+const CHAIN_COLORS=[0x2f6fb0,0x1f9d6b,0xc08316,0xcf4444,0x8b4bb0,0x0d9488,0xb45309,0x4f46e5,0xbe185d,0x15803d];
+const RESTYPE={ // VMD ResType: nonpolar/polar/acidic/basic
+  acidic:new Set(["ASP","GLU"]),basic:new Set(["ARG","LYS","HIS","HID","HIE","HIP"]),
+  polar:new Set(["SER","THR","ASN","GLN","TYR","CYS","TRP"]),
+};
+const RESTYPE_COL={acidic:0xcf4444,basic:0x2f6fb0,polar:0x1f9d6b,nonpolar:0x8a8f99,other:0xb0b6c0};
+const BACKBONE=new Set(["N","CA","C","O","OXT"]);
+const WATER_RES=new Set(["HOH","WAT","TIP","TIP3","H2O","SOL"]);
+const PROTEIN_RES=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","HID","HIE","HIP","SEC","MSE"]);
+const NUCLEIC_RES=new Set(["A","C","G","U","T","DA","DC","DG","DT","DU"]);
+
+// ============================================================ scene
+const vp=document.getElementById('viewport');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0xeef1f6);
+let camera=new THREE.PerspectiveCamera(50,1,0.05,8000);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(devicePixelRatio); renderer.xr.enabled=true;
+vp.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0xcdd5e0,1.05));
+const key=new THREE.DirectionalLight(0xffffff,1.25);key.position.set(40,60,50);scene.add(key);
+const rim=new THREE.DirectionalLight(0xfff0e0,0.45);rim.position.set(-50,-20,-40);scene.add(rim);
+const molecule=new THREE.Group(); scene.add(molecule);
+const measureGroup=new THREE.Group(); molecule.add(measureGroup); // measurement overlay
+const interactGroup=new THREE.Group(); molecule.add(interactGroup); // interaction/clash markers
+const ANGSTROM_TO_M=0.012;
+
+function resize(){
+  const w=vp.clientWidth,h=vp.clientHeight;
+  renderer.setSize(w,h);
+  if(camera.isPerspectiveCamera){camera.aspect=w/h;}
+  else{const r=orthoR;camera.left=-r*w/h;camera.right=r*w/h;camera.top=r;camera.bottom=-r;}
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize);
+
+// ============================================================ state
+let ATOMS=null, BONDS=null, EXT=null, CENTER=new THREE.Vector3();
+let userScale=1, orthoR=30, quality=2;
+let reps=[]; // {id,on,expanded,sel,draw,color,_pred,_count}
+let repSeq=0, activeRep=null;
+// docking: a "binder" is a subset of ATOMS (binder:true) the user can move to dock
+// docking: each loaded object (protein, binder, …) has its own LOCAL coordinate
+// frame and a transform (position + quaternion). Atoms keep fixed local coords
+// (a.lx/ly/lz); world coords a.x/y/z = objectTransform · local. Moving an object
+// only updates its transform + its own render group — never the protein, never
+// a global bond rebuild. This is the per-object internal coordinate system.
+let DOCK_MODE=false, hasBinder=false;
+let DOCK_GESTURE='rotate'; // 'rotate' | 'move' — what plain left-drag does in dock mode
+let OBJECTS=[];        // [{name, kind, group:THREE.Group, pos:Vector3, quat:Quaternion, center:Vector3}]
+let ACTIVE_OBJ=0;      // which object the move controls act on
+
+// ============================================================ parsers
+function parsePDB(text){
+  const atoms=[];let idx=0;
+  for(const line of text.split(/\r?\n/)){
+    const rec=line.slice(0,6).trim();
+    if(rec!=='ATOM'&&rec!=='HETATM')continue;
+    const name=line.slice(12,16).trim();
+    let elem=line.slice(76,78).trim().toUpperCase();
+    if(!elem){const L=name.replace(/[^A-Za-z]/g,'').toUpperCase();elem=(L.length>=2&&VDW[L.slice(0,2)])?L.slice(0,2):L.slice(0,1);}
+    const x=+line.slice(30,38),y=+line.slice(38,46),z=+line.slice(46,54);
+    if([x,y,z].some(Number.isNaN))continue;
+    atoms.push({idx:idx++,name,elem,x,y,z,resn:line.slice(17,20).trim(),
+      chain:line.slice(21,22).trim()||'A',resi:parseInt(line.slice(22,26))||0,
+      beta:parseFloat(line.slice(60,66))||0,het:rec==='HETATM',vdw:VDW[elem]||VDW.DEFAULT});
+  }
+  return atoms;
+}
+// PQR: whitespace-delimited ATOM/HETATM with charge + radius as last two columns
+function parsePQR(text){
+  const atoms=[];let idx=0;
+  for(const line of text.split(/\r?\n/)){
+    const rec=line.slice(0,6).trim();
+    if(rec!=='ATOM'&&rec!=='HETATM')continue;
+    const t=line.trim().split(/\s+/);
+    if(t.length<10)continue;
+    // [rec, serial, name, resn, (chain?), resi, x, y, z, charge, radius]
+    // chain may be absent; detect by counting from the end
+    const radius=parseFloat(t[t.length-1]),charge=parseFloat(t[t.length-2]);
+    const z=parseFloat(t[t.length-3]),y=parseFloat(t[t.length-4]),x=parseFloat(t[t.length-5]);
+    const resi=parseInt(t[t.length-6])||0;
+    const name=t[2],resn=t[3];
+    const hasChain=t.length>=11&&isNaN(parseInt(t[4]));
+    const chain=hasChain?t[4]:'A';
+    const L=name.replace(/[^A-Za-z]/g,'').toUpperCase();
+    const elem=(L.length>=2&&VDW[L.slice(0,2)])?L.slice(0,2):L.slice(0,1);
+    if([x,y,z].some(Number.isNaN))continue;
+    atoms.push({idx:idx++,name,elem,x,y,z,resn,chain,resi,beta:0,het:rec==='HETATM',
+      vdw:radius>0?radius:(VDW[elem]||VDW.DEFAULT),pqrCharge:charge});
+  }
+  return atoms;
+}
+// XYZ: line1 = count, line2 = comment, then "Elem x y z" per atom.
+function parseXYZ(text){
+  const lines=text.split(/\r?\n/);const n=parseInt(lines[0]);const atoms=[];let idx=0;
+  const start=Number.isNaN(n)?0:2;
+  for(let i=start;i<lines.length;i++){
+    const t=lines[i].trim().split(/\s+/);if(t.length<4)continue;
+    let elem=t[0].replace(/[^A-Za-z]/g,'');elem=(elem[0]||'C').toUpperCase()+(elem.slice(1).toLowerCase());
+    const E=elem.toUpperCase();const x=+t[1],y=+t[2],z=+t[3];
+    if([x,y,z].some(Number.isNaN))continue;
+    atoms.push({idx:idx++,name:elem+(idx),elem:E.length>1&&VDW[E.slice(0,2)]?E.slice(0,2):E.slice(0,1),
+      x,y,z,resn:'LIG',chain:'X',resi:1,beta:0,het:true,vdw:VDW[E]||VDW[E.slice(0,1)]||VDW.DEFAULT});
+  }
+  return atoms;
+}
+function parseCIF(text){
+  const lines=text.split(/\r?\n/),atoms=[];let i=0,idx=0;
+  while(i<lines.length){
+    if(lines[i].trim()==='loop_'){const cols=[];i++;
+      while(i<lines.length&&lines[i].trim().startsWith('_')){cols.push(lines[i].trim());i++;}
+      // macromolecular _atom_site loop
+      if(cols.some(c=>c.startsWith('_atom_site.'))){
+        const id=n=>cols.indexOf('_atom_site.'+n);
+        const cG=id('group_PDB'),cE=id('type_symbol'),cN=id('label_atom_id'),cR=id('label_comp_id'),
+          cC=id('auth_asym_id')>=0?id('auth_asym_id'):id('label_asym_id'),
+          cI=id('auth_seq_id')>=0?id('auth_seq_id'):id('label_seq_id'),
+          cx=id('Cartn_x'),cy=id('Cartn_y'),cz=id('Cartn_z'),cB=id('B_iso_or_equiv');
+        while(i<lines.length&&lines[i].trim()&&!lines[i].trim().startsWith('_')&&lines[i].trim()!=='loop_'&&!lines[i].trim().startsWith('#')){
+          const t=lines[i].trim().split(/\s+/);
+          if(t.length>=cols.length){const elem=(t[cE]||'').toUpperCase();
+            atoms.push({idx:idx++,name:(t[cN]||'').replace(/"/g,''),elem,x:+t[cx],y:+t[cy],z:+t[cz],
+              resn:t[cR]||'',chain:t[cC]||'A',resi:parseInt(t[cI])||0,
+              beta:cB>=0?(+t[cB]||0):0,het:(t[cG]||'')==='HETATM',vdw:VDW[elem]||VDW.DEFAULT});}
+          i++;
+        } continue;
+      }
+      // PDB chemical-component dictionary _chem_comp_atom loop (single ligands)
+      if(cols.some(c=>c.startsWith('_chem_comp_atom.'))){
+        const id=n=>cols.indexOf('_chem_comp_atom.'+n);
+        const cN=id('atom_id'),cE=id('type_symbol'),cR=id('comp_id'),cQ=id('charge');
+        // prefer deposited model coords; fall back to ideal coords if absent/blank
+        let cx=id('model_Cartn_x'),cy=id('model_Cartn_y'),cz=id('model_Cartn_z');
+        const ix=id('pdbx_model_Cartn_x_ideal'),iy=id('pdbx_model_Cartn_y_ideal'),iz=id('pdbx_model_Cartn_z_ideal');
+        if(cx<0){cx=ix;cy=iy;cz=iz;}
+        while(i<lines.length&&lines[i].trim()&&!lines[i].trim().startsWith('_')&&lines[i].trim()!=='loop_'&&!lines[i].trim().startsWith('#')){
+          const t=lines[i].trim().split(/\s+/);
+          if(t.length>=cols.length){
+            const elem=(t[cE]||'').toUpperCase();
+            let x=+t[cx],y=+t[cy],z=+t[cz];
+            // if model coords are missing markers (? or .), try ideal
+            if([x,y,z].some(Number.isNaN)&&ix>=0){x=+t[ix];y=+t[iy];z=+t[iz];}
+            if(![x,y,z].some(Number.isNaN))
+              atoms.push({idx:idx++,name:(t[cN]||'').replace(/"/g,''),elem,x,y,z,
+                resn:t[cR]||'LIG',chain:'X',resi:1,beta:0,het:true,
+                pqrCharge:cQ>=0?(parseFloat(t[cQ])||0):undefined,vdw:VDW[elem]||VDW.DEFAULT});}
+          i++;
+        } continue;
+      }
+    } i++;
+  }
+  return atoms;
+}
+
+// ============================================================ selection language
+function tokenize(s){return s.match(/\(|\)|"[^"]*"|[^\s()]+/g)||[];}
+// Compiles to a function (atoms)->Set(idx). Supports spatial/relational ops
+// (within / same residue as) that need the whole atom list, plus the per-atom
+// keywords. Per-atom clauses are wrapped to produce index sets.
+function compileSelection(sel){
+  const toks=tokenize(sel);let pos=0;
+  const peek=()=>toks[pos], adv=()=>toks[pos++];
+  function intRanges(vals){const out=new Set();let i=0;while(i<vals.length){
+    if(i+2<vals.length&&vals[i+1].toLowerCase()==='to'){for(let n=+vals[i];n<=+vals[i+2];n++)out.add(n);i+=3;}
+    else{const n=parseInt(vals[i]);if(!Number.isNaN(n))out.add(n);i++;}}return out;}
+  const STOP=['and','or','not',')','within','of','same','as'];
+  function values(){const v=[];while(peek()&&!STOP.includes(peek().toLowerCase()))v.push(adv().replace(/"/g,''));return v;}
+  // per-atom predicate -> set builder
+  function P(fn){return atoms=>{const s=new Set();for(const a of atoms)if(fn(a))s.add(a.idx);return s;};}
+  function clause(){
+    const kw=adv().toLowerCase();
+    switch(kw){
+      case 'all':return P(()=>true); case 'none':return P(()=>false);
+      case 'protein':return P(a=>PROTEIN_RES.has(a.resn));
+      case 'nucleic':return P(a=>NUCLEIC_RES.has(a.resn));
+      case 'water':return P(a=>WATER_RES.has(a.resn));
+      case 'hetero':case 'hetatm':return P(a=>a.het);
+      case 'ligand':return P(a=>a.het&&!WATER_RES.has(a.resn));
+      case 'backbone':return P(a=>BACKBONE.has(a.name)&&PROTEIN_RES.has(a.resn));
+      case 'sidechain':return P(a=>!BACKBONE.has(a.name)&&PROTEIN_RES.has(a.resn));
+      case 'name':{const pats=values().map(v=>new RegExp('^'+v.replace(/\*/g,'.*')+'$'));return P(a=>pats.some(p=>p.test(a.name)));}
+      case 'resname':case 'resn':{const s=new Set(values());return P(a=>s.has(a.resn));}
+      case 'element':{const s=new Set(values().map(v=>v.toUpperCase()));return P(a=>s.has(a.elem));}
+      case 'chain':{const s=new Set(values());return P(a=>s.has(a.chain));}
+      case 'resid':case 'resi':{const s=intRanges(values());return P(a=>s.has(a.resi));}
+      case 'index':{const s=intRanges(values());return P(a=>s.has(a.idx));}
+      default:throw new Error('unknown keyword: '+kw);
+    }
+  }
+  function intersect(A,B){const s=new Set();for(const x of A)if(B.has(x))s.add(x);return s;}
+  function withinSet(dist,refFn,excl){return atoms=>{const inner=refFn(atoms);const ref=[];for(const a of atoms)if(inner.has(a.idx))ref.push(a);
+    const s=new Set();const d2=dist*dist;const cell=Math.max(dist,2.0);const grid=new Map();
+    const key=(x,y,z)=>`${Math.floor(x/cell)},${Math.floor(y/cell)},${Math.floor(z/cell)}`;
+    for(const a of atoms){const k=key(a.x,a.y,a.z);(grid.get(k)||grid.set(k,[]).get(k)).push(a);}
+    for(const r of ref){const ci=Math.floor(r.x/cell),cj=Math.floor(r.y/cell),ck=Math.floor(r.z/cell);
+      for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)for(let dk=-1;dk<=1;dk++){
+        const arr=grid.get(`${ci+di},${cj+dj},${ck+dk}`);if(!arr)continue;
+        for(const a of arr){const dx=a.x-r.x,dy=a.y-r.y,dz=a.z-r.z;if(dx*dx+dy*dy+dz*dz<=d2){if(excl&&inner.has(a.idx))continue;s.add(a.idx);}}}}
+    return s;};}
+  function sameResAs(refFn){return atoms=>{const inner=refFn(atoms);const keys=new Set();
+    for(const a of atoms)if(inner.has(a.idx))keys.add(a.chain+':'+a.resi);const s=new Set();
+    for(const a of atoms)if(keys.has(a.chain+':'+a.resi))s.add(a.idx);return s;};}
+  function primary(){
+    const t=peek();if(t===undefined)throw new Error('unexpected end');
+    if(t==='('){adv();const e=expr();if(peek()===')')adv();else throw new Error('missing )');return e;}
+    const tl=t.toLowerCase();
+    if(tl==='not'){adv();const f=primary();return atoms=>{const inner=f(atoms);const s=new Set();for(const a of atoms)if(!inner.has(a.idx))s.add(a.idx);return s;};}
+    if(tl==='same'){adv();const w=adv();if((w||'').toLowerCase()!=='residue')throw new Error("expected 'residue' after 'same'");
+      const asw=adv();if((asw||'').toLowerCase()!=='as')throw new Error("expected 'as'");return sameResAs(primary());}
+    if(tl==='within'||tl==='exwithin'){adv();const dist=parseFloat(adv());const ofw=adv();if((ofw||'').toLowerCase()!=='of')throw new Error("expected 'of' after within <dist>");return withinSet(dist,primary(),tl==='exwithin');}
+    return clause();
+  }
+  // postfix spatial op: "protein within 5 of ligand" == protein AND (within 5 of ligand)
+  function factor(){let f=primary();
+    while(peek()&&['within','exwithin'].includes(peek().toLowerCase())){
+      const tl=adv().toLowerCase();const dist=parseFloat(adv());const ofw=adv();if((ofw||'').toLowerCase()!=='of')throw new Error("expected 'of'");
+      const w=withinSet(dist,primary(),tl==='exwithin');const p=f;f=atoms=>intersect(p(atoms),w(atoms));}
+    return f;}
+  function term(){let f=factor();while(peek()&&peek().toLowerCase()==='and'){adv();const g=factor();const p=f;f=atoms=>intersect(p(atoms),g(atoms));}return f;}
+  function expr(){let t=term();while(peek()&&peek().toLowerCase()==='or'){adv();const u=term();const p=t;
+    t=atoms=>{const A=p(atoms),B=u(atoms);const s=new Set(A);for(const x of B)s.add(x);return s;};}return t;}
+  const setFn=expr(); if(pos<toks.length)throw new Error('trailing tokens: '+toks.slice(pos).join(' '));
+  let cacheKey=null,cacheSet=null;
+  return a=>{ if(cacheKey!==ATOMS){cacheKey=ATOMS;cacheSet=setFn(ATOMS||[]);} return cacheSet.has(a.idx); };
+}
+
+// ============================================================ coloring
+function atomColor(a,scheme,chains,betaRange){
+  switch(scheme){
+    case 'name':return NAMECOL[a.elem]??NAMECOL.DEFAULT;
+    case 'element':return CPK[a.elem]??CPK.DEFAULT;
+    case 'chain':return CHAIN_COLORS[chains.indexOf(a.chain)%CHAIN_COLORS.length];
+    case 'restype':{
+      const r=RESTYPE.acidic.has(a.resn)?'acidic':RESTYPE.basic.has(a.resn)?'basic':
+        RESTYPE.polar.has(a.resn)?'polar':PROTEIN_RES.has(a.resn)?'nonpolar':'other';
+      return RESTYPE_COL[r];}
+    case 'index':{const t=a.idx/(ATOMS.length-1||1);return spectrum(t);}
+    case 'beta':{const{min,max}=betaRange;const t=max>min?(a.beta-min)/(max-min):0.5;return spectrum(t);}
+    case 'charge':return chargeColorContinuous(templateCharge(a));
+    default:return CPK[a.elem]??CPK.DEFAULT;
+  }
+}
+function spectrum(t){ // blue->white->red (VMD BWR-ish), works on light bg
+  t=Math.max(0,Math.min(1,t));const c=new THREE.Color();
+  if(t<0.5){const u=t*2;c.setRGB(0.15+0.85*u,0.30+0.70*u,0.85);}
+  else{const u=(t-0.5)*2;c.setRGB(1.0,0.85*(1-u)+0.15,0.85*(1-u));}
+  return c.getHex();
+}
+
+// ============================================================ bond inference
+function inferBonds(atoms){
+  // spatial hash for O(n) neighbor search
+  const cell=2.0,grid=new Map();
+  const keyOf=(x,y,z)=>`${Math.floor(x/cell)},${Math.floor(y/cell)},${Math.floor(z/cell)}`;
+  atoms.forEach(a=>{const k=keyOf(a.x,a.y,a.z);(grid.get(k)||grid.set(k,[]).get(k)).push(a);});
+  const bonds=[];
+  for(const a of atoms){
+    const cx=Math.floor(a.x/cell),cy=Math.floor(a.y/cell),cz=Math.floor(a.z/cell);
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+      const arr=grid.get(`${cx+dx},${cy+dy},${cz+dz}`);if(!arr)continue;
+      for(const b of arr){if(b.idx<=a.idx)continue;
+        const d=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+        const cut=(a.vdw+b.vdw)*0.6;
+        if(d<cut&&d>0.4)bonds.push([a.idx,b.idx]);}
+    }
+  }
+  return bonds;
+}
+
+// ============================================================ representation rendering
+const sphereGeoHi=new THREE.IcosahedronGeometry(1,3);
+const sphereGeoMed=new THREE.IcosahedronGeometry(1,2);
+const sphereGeoLo=new THREE.IcosahedronGeometry(1,1);
+function sphereGeo(){return quality==2?sphereGeoHi:quality==1?sphereGeoMed:sphereGeoLo;}
+
+let CURRENT_OBJ_TAG=0; // object id that draw* should stamp on meshes it creates
+function buildAllReps(){
+  // clear reps but keep the measurement + interaction overlays
+  [...molecule.children].forEach(c=>{if(c!==measureGroup&&c!==interactGroup)molecule.remove(c);});
+  if(!ATOMS)return;
+  const chains=[...new Set(ATOMS.map(a=>a.chain))];
+  let bmin=Infinity,bmax=-Infinity;for(const a of ATOMS){if(a.beta<bmin)bmin=a.beta;if(a.beta>bmax)bmax=a.beta;}
+  const betaRange={min:bmin,max:bmax};
+
+  for(const rep of reps){
+    if(!rep.on||!rep._pred)continue;
+    const selAll=ATOMS.filter(rep._pred);
+    if(!selAll.length)continue;
+    // split the rep's selection by object so each object's geometry can carry its
+    // own transform (independent movement without rebuilding other objects)
+    const byObj=new Map();
+    for(const a of selAll){const o=a.obj||0;(byObj.get(o)||byObj.set(o,[]).get(o)).push(a);}
+    for(const [oid,sel] of byObj){
+      CURRENT_OBJ_TAG=oid;
+      if(rep.draw==='vdw'||rep.draw==='cpk'||rep.draw==='points'){
+        drawSpheres(sel,rep,chains,betaRange);
+        if(rep.draw==='cpk')drawSticks(sel,rep,chains,betaRange,0.15);
+      } else if(rep.draw==='licorice'){
+        drawSpheres(sel,rep,chains,betaRange,0.30);
+        drawSticks(sel,rep,chains,betaRange,0.30);
+      } else if(rep.draw==='lines'){
+        drawLines(sel,rep,chains,betaRange);
+      } else if(rep.draw==='trace'){
+        drawTrace(sel,rep,chains,betaRange);
+      } else if(rep.draw==='cartoon'){
+        drawCartoon(sel,rep,chains,betaRange);
+      } else if(rep.draw==='surface'){
+        drawSpheres(sel,rep,chains,betaRange,null,true);
+      }
+    }
+  }
+  CURRENT_OBJ_TAG=0;
+  applyScale();
+}
+// add a mesh to the scene, stamped with the object id it belongs to
+function addObjMesh(m){m.userData.obj=CURRENT_OBJ_TAG;molecule.add(m);}
+function radiusForDraw(a,rep){
+  if(rep.draw==='vdw')return a.vdw;
+  if(rep.draw==='surface')return a.vdw*1.05;
+  if(rep.draw==='cpk')return a.het?0.42:0.36;
+  if(rep.draw==='points')return 0.18;
+  return 0.30;
+}
+function drawSpheres(sel,rep,chains,betaRange,fixedR=null,surf=false){
+  const geo=sphereGeo();
+  const mat=new THREE.MeshStandardMaterial({roughness:surf?0.6:0.42,metalness:0.04,
+    transparent:surf,opacity:surf?0.55:1.0});
+  const inst=new THREE.InstancedMesh(geo,mat,sel.length);
+  const d=new THREE.Object3D(),col=new THREE.Color();
+  sel.forEach((a,k)=>{d.position.set(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z);
+    d.scale.setScalar(fixedR??radiusForDraw(a,rep));d.updateMatrix();inst.setMatrixAt(k,d.matrix);
+    col.setHex(atomColor(a,rep.color,chains,betaRange));inst.setColorAt(k,col);});
+  inst.instanceMatrix.needsUpdate=true;if(inst.instanceColor)inst.instanceColor.needsUpdate=true;
+  inst.userData.pickable=sel; addObjMesh(inst);
+}
+function drawSticks(sel,rep,chains,betaRange,radius){
+  const idxset=new Set(sel.map(a=>a.idx));
+  const pairs=BONDS.filter(([i,j])=>idxset.has(i)&&idxset.has(j));
+  if(!pairs.length)return;
+  const geo=new THREE.CylinderGeometry(radius,radius,1,quality==0?6:10,1);
+  const inst=new THREE.InstancedMesh(geo,new THREE.MeshStandardMaterial({roughness:0.5,metalness:0.04}),pairs.length*2);
+  const up=new THREE.Vector3(0,1,0),d=new THREE.Object3D(),col=new THREE.Color();
+  const byIdx=new Map(ATOMS.map(a=>[a.idx,a]));let n=0;
+  for(const [i,j] of pairs){
+    const a=byIdx.get(i),b=byIdx.get(j);
+    const va=new THREE.Vector3(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z);
+    const vb=new THREE.Vector3(b.x-CENTER.x,b.y-CENTER.y,b.z-CENTER.z);
+    const mid=va.clone().add(vb).multiplyScalar(0.5),dir=vb.clone().sub(va),len=dir.length();
+    const q=new THREE.Quaternion().setFromUnitVectors(up,dir.clone().normalize());
+    // half-bond a->mid colored as a
+    d.position.copy(va.clone().add(mid).multiplyScalar(0.5));d.quaternion.copy(q);d.scale.set(1,len/2,1);d.updateMatrix();
+    inst.setMatrixAt(n,d.matrix);col.setHex(atomColor(a,rep.color,chains,betaRange));inst.setColorAt(n,col);n++;
+    d.position.copy(mid.clone().add(vb).multiplyScalar(0.5));d.quaternion.copy(q);d.scale.set(1,len/2,1);d.updateMatrix();
+    inst.setMatrixAt(n,d.matrix);col.setHex(atomColor(b,rep.color,chains,betaRange));inst.setColorAt(n,col);n++;
+  }
+  inst.instanceMatrix.needsUpdate=true;if(inst.instanceColor)inst.instanceColor.needsUpdate=true;addObjMesh(inst);
+}
+function drawLines(sel,rep,chains,betaRange){
+  const idxset=new Set(sel.map(a=>a.idx));
+  const pairs=BONDS.filter(([i,j])=>idxset.has(i)&&idxset.has(j));
+  const byIdx=new Map(ATOMS.map(a=>[a.idx,a]));
+  const pos=[],colArr=[];const c=new THREE.Color();
+  for(const [i,j] of pairs){const a=byIdx.get(i),b=byIdx.get(j);
+    const mx=(a.x+b.x)/2-CENTER.x,my=(a.y+b.y)/2-CENTER.y,mz=(a.z+b.z)/2-CENTER.z;
+    pos.push(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z,mx,my,mz);
+    c.setHex(atomColor(a,rep.color,chains,betaRange));colArr.push(c.r,c.g,c.b,c.r,c.g,c.b);
+    pos.push(mx,my,mz,b.x-CENTER.x,b.y-CENTER.y,b.z-CENTER.z);
+    c.setHex(atomColor(b,rep.color,chains,betaRange));colArr.push(c.r,c.g,c.b,c.r,c.g,c.b);}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(colArr,3));
+  addObjMesh(new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true})));
+}
+function drawTrace(sel,rep,chains,betaRange){
+  // CA trace as tubes, grouped by chain, ordered by resi
+  const cas=sel.filter(a=>a.name==='CA').sort((x,y)=>x.chain<y.chain?-1:x.chain>y.chain?1:x.resi-y.resi);
+  const byChain=new Map();for(const a of cas){(byChain.get(a.chain)||byChain.set(a.chain,[]).get(a.chain)).push(a);}
+  const col=new THREE.Color();
+  for(const [,list] of byChain){
+    if(list.length<2)continue;
+    const pts=list.map(a=>new THREE.Vector3(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z));
+    const curve=new THREE.CatmullRomCurve3(pts);
+    const tube=new THREE.TubeGeometry(curve,Math.max(8,list.length*4),0.45,quality==0?5:8,false);
+    // per-vertex color along the tube by residue index
+    const cnt=tube.attributes.position.count, carr=new Float32Array(cnt*3);
+    for(let v=0;v<cnt;v++){const f=v/(cnt-1);const a=list[Math.min(list.length-1,Math.floor(f*list.length))];
+      col.setHex(atomColor(a,rep.color,chains,betaRange));carr[v*3]=col.r;carr[v*3+1]=col.g;carr[v*3+2]=col.b;}
+    tube.setAttribute('color',new THREE.Float32BufferAttribute(carr,3));
+    addObjMesh(new THREE.Mesh(tube,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5})));
+  }
+}
+function applyScale(){molecule.scale.setScalar(userScale*(renderer.xr.isPresenting?ANGSTROM_TO_M:1));}
+
+// ============================================================ SECONDARY STRUCTURE (M5)
+function dihedralDeg(p0,p1,p2,p3){
+  const b0=p0.clone().sub(p1),b1=p2.clone().sub(p1),b2=p3.clone().sub(p2);
+  const b1n=b1.clone().normalize();
+  const v=b0.clone().sub(b1n.clone().multiplyScalar(b0.dot(b1n)));
+  const w=b2.clone().sub(b1n.clone().multiplyScalar(b2.dot(b1n)));
+  const x=v.dot(w),y=b1n.clone().cross(v).dot(w);
+  return Math.atan2(y,x)*180/Math.PI;
+}
+function assignSecondaryStructure(atoms){
+  const byChain=new Map();
+  for(const a of atoms){if(!PROTEIN_RES.has(a.resn))continue;
+    if(!byChain.has(a.chain))byChain.set(a.chain,new Map());
+    const cm=byChain.get(a.chain);if(!cm.has(a.resi))cm.set(a.resi,{});
+    cm.get(a.resi)[a.name]=a;}
+  const ss=new Map();
+  for(const [chain,cm] of byChain){
+    const resis=[...cm.keys()].sort((x,y)=>x-y);
+    for(let i=0;i<resis.length;i++){
+      const r=cm.get(resis[i]),rp=cm.get(resis[i-1]),rn=cm.get(resis[i+1]);
+      let phi=null,psi=null;const V=a=>new THREE.Vector3(a.x,a.y,a.z);
+      if(rp&&rp.C&&r.N&&r.CA&&r.C)phi=dihedralDeg(V(rp.C),V(r.N),V(r.CA),V(r.C));
+      if(rn&&r.N&&r.CA&&r.C&&rn.N)psi=dihedralDeg(V(r.N),V(r.CA),V(r.C),V(rn.N));
+      let s='C';
+      if(phi!==null&&psi!==null){
+        if(phi>-160&&phi<-30&&psi>-90&&psi<-10)s='H';
+        else if(phi>-180&&phi<-40&&(psi>90&&psi<180||psi>-180&&psi<-150))s='E';}
+      ss.set(chain+':'+resis[i],s);
+    }
+    for(let i=0;i<resis.length;i++){const s=ss.get(chain+':'+resis[i]);
+      if(s==='H'||s==='E'){let run=1,j=i+1;while(j<resis.length&&ss.get(chain+':'+resis[j])===s){run++;j++;}
+        if(run<3)for(let m=i;m<j;m++)ss.set(chain+':'+resis[m],'C');i=j-1;}}
+  }
+  for(const a of atoms)a.ss=ss.get(a.chain+':'+a.resi)||'C';
+  return ss;
+}
+function drawCartoon(sel,rep,chains,betaRange){
+  const cas=sel.filter(a=>a.name==='CA').sort((x,y)=>x.chain<y.chain?-1:x.chain>y.chain?1:x.resi-y.resi);
+  const byChain=new Map();for(const a of cas){(byChain.get(a.chain)||byChain.set(a.chain,[]).get(a.chain)).push(a);}
+  const col=new THREE.Color();
+  for(const [,list] of byChain){
+    if(list.length<3)continue;
+    const pts=list.map(a=>new THREE.Vector3(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z));
+    const curve=new THREE.CatmullRomCurve3(pts);
+    const segs=Math.max(12,list.length*6);
+    const samplesSS=[];for(let s=0;s<=segs;s++){const f=s/segs;const idx=Math.min(list.length-1,Math.floor(f*list.length));samplesSS.push(list[idx].ss||'C');}
+    const radial=quality==0?6:10;
+    const frames=curve.computeFrenetFrames(segs,false);
+    const positions=[],colors=[],indices=[];
+    for(let s=0;s<=segs;s++){
+      const f=s/segs;const p=curve.getPointAt(f);const ssv=samplesSS[s];
+      const wide=ssv==='H'?1.1:ssv==='E'?1.3:0.35;
+      const thick=ssv==='C'?0.35:0.45;
+      const N=frames.normals[s],B=frames.binormals[s];
+      const a=list[Math.min(list.length-1,Math.floor(f*list.length))];
+      col.setHex(atomColor(a,rep.color,chains,betaRange));
+      for(let r=0;r<radial;r++){const ang=r/radial*Math.PI*2;
+        const off=N.clone().multiplyScalar(Math.cos(ang)*wide).add(B.clone().multiplyScalar(Math.sin(ang)*thick));
+        const v=p.clone().add(off);positions.push(v.x,v.y,v.z);colors.push(col.r,col.g,col.b);}
+    }
+    for(let s=0;s<segs;s++)for(let r=0;r<radial;r++){
+      const a=s*radial+r,b=s*radial+(r+1)%radial,c=(s+1)*radial+r,d=(s+1)*radial+(r+1)%radial;
+      indices.push(a,c,b,b,c,d);}
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    g.setIndex(indices);g.computeVertexNormals();
+    addObjMesh(new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5,side:THREE.DoubleSide})));
+  }
+}
+
+// ============================================================ load
+// Build an object record with its own render group + transform (pos/quat) about
+// a local center. Atoms of this object render inside its group, so moving the
+// group (one transform) repositions them with zero geometry rebuild.
+function makeObject(name,kind,center){
+  const group=new THREE.Group();
+  group.position.copy(CENTER).multiplyScalar(0); // groups live in molecule space
+  return {name,kind,group,pos:new THREE.Vector3(0,0,0),quat:new THREE.Quaternion(),
+    center:center.clone()};
+}
+// Recompute world coords a.x/y/z for one object from its local coords + transform.
+// world = quat·(local − center) + center + pos
+function syncObjectWorld(i){
+  const o=OBJECTS[i];const v=new THREE.Vector3();
+  for(const a of ATOMS){if((a.obj||0)!==i)continue;
+    v.set(a.lx-o.center.x,a.ly-o.center.y,a.lz-o.center.z).applyQuaternion(o.quat);
+    a.x=v.x+o.center.x+o.pos.x; a.y=v.y+o.center.y+o.pos.y; a.z=v.z+o.center.z+o.pos.z;}
+}
+function setStructure(atoms){
+  ATOMS=atoms;
+  // object registry: this load becomes object 0 (replaces everything)
+  const looksProtein=atoms.some(a=>!a.het);
+  ACTIVE_OBJ=0; for(const a of atoms)a.obj=0;
+  let cx=0,cy=0,cz=0;for(const a of atoms){cx+=a.x;cy+=a.y;cz+=a.z;}
+  CENTER.set(cx/atoms.length,cy/atoms.length,cz/atoms.length);
+  // object 0 frame: identity transform, atoms' local coords = their loaded coords
+  for(const a of atoms){a.lx=a.x;a.ly=a.y;a.lz=a.z;}
+  OBJECTS=[makeObject(looksProtein?'Structure':'Molecule','structure',new THREE.Vector3(cx/atoms.length,cy/atoms.length,cz/atoms.length))];
+  BONDS=inferBonds(atoms);
+  const xs=atoms.map(a=>a.x),ys=atoms.map(a=>a.y),zs=atoms.map(a=>a.z);
+  EXT={x:Math.max(...xs)-Math.min(...xs),y:Math.max(...ys)-Math.min(...ys),z:Math.max(...zs)-Math.min(...zs)};
+
+  // detect explicit hydrogens (affects radius set / surface)
+  STRUCT_HAS_H=atoms.some(a=>a.elem==='H');
+  // assign secondary structure for cartoon
+  assignSecondaryStructure(atoms);
+
+  // Default representation stack. If a ligand is present, center on it and
+  // highlight the 10 A environment (user's requested default); else whole protein.
+  reps=[];repSeq=0;
+  const hasLigand=atoms.some(a=>a.het&&!WATER_RES.has(a.resn));
+  if(hasLigand){
+    addRep('protein','trace','chain',true);                       // backbone context
+    addRep('protein within 5 of ligand','licorice','restype',true); // pocket residues (5 Å)
+    addRep('ligand','cpk','element',true);                         // the ligand
+  } else {
+    addRep('protein','trace','chain',true);
+    addRep('protein','lines','name',true);
+    addRep('hetero and not water','cpk','element',true);
+  }
+  recompileAll();
+  renderReps();
+
+  document.getElementById('mol-name').textContent=`${atoms.length} atoms loaded`;
+  document.getElementById('statsec').style.display='';
+  document.getElementById('measuresec').style.display='';
+  document.getElementById('envsec').style.display='';
+  document.getElementById('t-binder').disabled=false;
+  document.getElementById('docksec').style.display='';
+  refreshObjectSelector();
+  document.getElementById('loadsec').style.display='none';
+  const chains=[...new Set(atoms.map(a=>a.chain))];
+  const resset=new Set(atoms.map(a=>a.chain+':'+a.resi));
+  document.getElementById('s-atoms').textContent=atoms.length;
+  document.getElementById('s-ph').textContent=`${atoms.filter(a=>!a.het).length} / ${atoms.filter(a=>a.het).length}`;
+  document.getElementById('s-res').textContent=resset.size;
+  document.getElementById('s-chains').textContent=chains.length+' ('+chains.join(',')+')';
+  document.getElementById('s-ext').textContent=`${EXT.x.toFixed(0)}×${EXT.y.toFixed(0)}×${EXT.z.toFixed(0)}`;
+
+  buildAllReps();
+  // center the view on the ligand if present
+  if(hasLigand){
+    const lig=atoms.filter(a=>a.het&&!WATER_RES.has(a.resn));
+    let lx=0,ly=0,lz=0;for(const a of lig){lx+=a.x;ly+=a.y;lz+=a.z;}
+    lx/=lig.length;ly/=lig.length;lz/=lig.length;
+    molecule.position.set(-(lx-CENTER.x),-(ly-CENTER.y),-(lz-CENTER.z));
+  }
+  frameView();
+}
+
+// ============================================================ representation model
+function addRep(sel,draw,color,on){
+  reps.push({id:++repSeq,on:on??true,expanded:false,sel,draw,color,_pred:null,_count:0,_err:null});
+}
+function recompileAll(){for(const r of reps)compileRep(r);}
+function compileRep(r){
+  try{r._pred=compileSelection(r.sel||'all');r._err=null;
+    r._count=ATOMS?ATOMS.filter(r._pred).length:0;}
+  catch(e){r._pred=null;r._err=e.message;r._count=0;}
+}
+
+const DRAW_OPTS=[['lines','Lines'],['vdw','VDW spheres'],['cpk','CPK'],['licorice','Licorice'],
+  ['trace','Trace (tube)'],['cartoon','Cartoon (ribbon)'],['points','Points'],['surface','Surface']];
+const COLOR_OPTS=[['name','Name'],['element','Element'],['chain','Chain'],['restype','ResType'],
+  ['charge','Charge'],['index','Index (rainbow)'],['beta','Beta / B-factor']];
+
+function renderReps(){
+  const list=document.getElementById('replist');list.innerHTML='';
+  document.getElementById('repcount').textContent=reps.length;
+  reps.forEach((r)=>{
+    const card=document.createElement('div');
+    card.className='rep'+(r.on?' on':'')+(r.expanded?' expanded':'')+(activeRep===r?' active':'');
+    const drawLabel=(DRAW_OPTS.find(d=>d[0]===r.draw)||['','?'])[1];
+    card.innerHTML=`
+      <div class="rep-top">
+        <div class="eye" title="toggle visibility">${r.on?'●':'○'}</div>
+        <div class="rep-name">${escapeHtml(r.sel||'all')}
+          <small>· ${drawLabel}${r._err?' · <span style="color:var(--bad)">selection error</span>':' · '+r._count+' atoms'}</small></div>
+        <div class="rep-del" title="delete">×</div>
+      </div>
+      <div class="rep-body">
+        <div class="field"><label>Selection</label>
+          <div class="sel-row">
+            <input type="text" class="sel-input ${r._err?'bad':''}" value="${escapeAttr(r.sel)}" spellcheck="false">
+            <button class="pickbtn" title="Click atoms in the viewport to build this selection">Pick</button>
+          </div>
+          ${SELECT_REP===r?`<div class="pickmode">
+            <span>Pick:</span>
+            ${['atom','residue','chain','bond'].map(m=>`<button class="pm ${PICK_MODE===m?'on':''}" data-pm="${m}">${m[0].toUpperCase()+m.slice(1)}</button>`).join('')}
+          </div>`:''}
+          <div class="selstatus ${r._err?'err':''}">${r._err?('⚠ '+r._err):(r._count+' atoms selected')}</div>
+        </div>
+        <div class="two">
+          <div class="field"><label>Drawing</label>
+            <select class="draw-sel">${DRAW_OPTS.map(([v,l])=>`<option value="${v}" ${r.draw===v?'selected':''}>${l}</option>`).join('')}</select></div>
+          <div class="field"><label>Coloring</label>
+            <select class="color-sel">${COLOR_OPTS.map(([v,l])=>`<option value="${v}" ${r.color===v?'selected':''}>${l}</option>`).join('')}</select></div>
+        </div>
+        ${(r.color==='index'||r.color==='beta')?'<div class="legend"><span>low</span><div class="grad" style="background:linear-gradient(90deg,#2650d8,#f5f5f5,#e03030)"></div><span>high</span></div>':''}
+      </div>`;
+    // events
+    card.querySelector('.eye').onclick=e=>{e.stopPropagation();r.on=!r.on;renderReps();buildAllReps();};
+    card.querySelector('.rep-del').onclick=e=>{e.stopPropagation();reps=reps.filter(x=>x!==r);if(activeRep===r)activeRep=null;renderReps();buildAllReps();};
+    card.querySelector('.rep-top').onclick=()=>{r.expanded=!r.expanded;activeRep=r;renderReps();};
+    const selInput=card.querySelector('.sel-input');
+    if(selInput){
+      selInput.onclick=e=>e.stopPropagation();
+      selInput.oninput=()=>{r.sel=selInput.value;compileRep(r);
+        const st=card.querySelector('.selstatus');
+        if(r._err){st.textContent='⚠ '+r._err;st.classList.add('err');selInput.classList.add('bad');}
+        else{st.textContent=r._count+' atoms selected';st.classList.remove('err');selInput.classList.remove('bad');buildAllReps();
+          card.querySelector('.rep-name').innerHTML=escapeHtml(r.sel||'all')+` <small>· ${drawLabel} · ${r._count} atoms</small>`;}};
+      selInput.onkeydown=e=>{if(e.key==='Enter')selInput.blur();};
+    }
+    card.querySelector('.draw-sel').onchange=e=>{r.draw=e.target.value;renderReps();buildAllReps();};
+    card.querySelector('.color-sel').onchange=e=>{r.color=e.target.value;renderReps();buildAllReps();};
+    const pickBtn=card.querySelector('.pickbtn');
+    if(pickBtn){
+      pickBtn.classList.toggle('on',SELECT_REP===r);
+      pickBtn.textContent=SELECT_REP===r?'Picking…':'Pick';
+      pickBtn.onclick=e=>{e.stopPropagation();
+        if(SELECT_REP===r){SELECT_REP=null;}
+        else{SELECT_REP=r;SELECT_BUF=[];BOND_PICK=[];
+          if(MEASURE_MODE){MEASURE_MODE=false;const mt=document.getElementById('measure-toggle');
+            if(mt){mt.classList.remove('primary');document.getElementById('measure-toggle-label').textContent='Start picking atoms';}}
+          if(DOCK_MODE){DOCK_MODE=false;document.getElementById('dock-toggle').classList.remove('primary');
+            document.getElementById('dock-toggle-label').textContent='Enter move mode';
+            document.getElementById('dock-hint').style.display='none';document.getElementById('dock-nudge').style.display='none';
+            document.getElementById('viewport').style.cursor='';}
+          toast(`Pick mode: ${PICK_MODE}. Click atoms in the viewport; click Pick again to finish.`);}
+        document.getElementById('hud').style.outline=SELECT_REP?'2px solid var(--accent)':'';
+        renderReps();};
+    }
+    card.querySelectorAll('.pickmode .pm').forEach(b=>b.onclick=ev=>{ev.stopPropagation();
+      PICK_MODE=b.getAttribute('data-pm');BOND_PICK=[];renderReps();});
+    list.appendChild(card);
+  });
+}
+function escapeHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function escapeAttr(s){return (s||'').replace(/"/g,'&quot;');}
+
+document.getElementById('addrep').onclick=()=>{addRep('all','lines','name',true);compileRep(reps[reps.length-1]);activeRep=reps[reps.length-1];reps[reps.length-1].expanded=true;renderReps();buildAllReps();};
+
+// ============================================================ camera / controls
+let sph={theta:0.7,phi:1.15,r:80};
+function updateCam(){const t=new THREE.Vector3();
+  camera.position.set(t.x+sph.r*Math.sin(sph.phi)*Math.sin(sph.theta),
+    t.y+sph.r*Math.cos(sph.phi),t.z+sph.r*Math.sin(sph.phi)*Math.cos(sph.theta));
+  camera.lookAt(t);}
+function frameView(){if(!EXT)return;const m=Math.max(EXT.x,EXT.y,EXT.z);
+  sph.r=m/Math.tan(camera.isPerspectiveCamera?camera.fov*Math.PI/360:0.5)*0.75+4;orthoR=m*0.7;resize();updateCam();}
+(function(){let down=false,btn=0,px=0,py=0,moved=false,_dragMoved=false;const el=renderer.domElement;
+  el.addEventListener('contextmenu',e=>{if(DOCK_MODE)e.preventDefault();});
+  el.addEventListener('mousedown',e=>{down=true;btn=e.button;px=e.clientX;py=e.clientY;moved=false;});
+  addEventListener('mouseup',e=>{
+    if(down&&!moved&&btn===0&&!DOCK_MODE)pickAtom(e);
+    if(down&&DOCK_MODE&&moved&&_dragMoved){commitObject(ACTIVE_OBJ);_dragMoved=false;}
+    down=false;});
+  addEventListener('mousemove',e=>{if(!down)return;const dx=e.clientX-px,dy=e.clientY-py;
+    if(Math.abs(dx)+Math.abs(dy)>3)moved=true;px=e.clientX;py=e.clientY;
+    if(DOCK_MODE&&(btn===0||btn===2)){
+      _dragMoved=true;
+      const camR=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0); // screen right
+      const camU=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1); // screen up
+      // Decide rotate vs translate. Translate if: right-drag, Shift held, or the
+      // Move sub-mode is active. Otherwise trackball-rotate about the center of mass.
+      const doTranslate = btn===2 || e.shiftKey || DOCK_GESTURE==='move';
+      if(doTranslate){
+        const sc=sph.r*0.0016/(userScale||1);
+        liveTranslateVec(camR.multiplyScalar(dx*sc).add(camU.multiplyScalar(-dy*sc)));
+      } else {
+        if(Math.abs(dx))liveRotateAxis(camU,dx*0.4);
+        if(Math.abs(dy))liveRotateAxis(camR,dy*0.4);
+      }
+      return;
+    }
+    if(btn===0){sph.theta-=dx*0.01;sph.phi=Math.max(0.05,Math.min(Math.PI-0.05,sph.phi-dy*0.01));updateCam();}
+    else{const pan=sph.r*0.0015;const r=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0),
+      u=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+      molecule.position.addScaledVector(r,dx*pan).addScaledVector(u,-dy*pan);}});
+  el.addEventListener('wheel',e=>{e.preventDefault();
+    if(DOCK_MODE){ // in move mode, wheel moves the active object along the camera depth axis
+      const fwd=new THREE.Vector3().setFromMatrixColumn(camera.matrix,2).negate();
+      const step=sph.r*0.04*(userScale?1/userScale:1);
+      liveTranslateVec(fwd.multiplyScalar(-Math.sign(e.deltaY)*step));
+      commitObject(ACTIVE_OBJ);return;
+    }
+    if(camera.isPerspectiveCamera){sph.r*=(1+Math.sign(e.deltaY)*0.08);sph.r=Math.max(2,sph.r);updateCam();}
+    else{orthoR*=(1+Math.sign(e.deltaY)*0.08);resize();}},{passive:false});
+})();
+
+// ============================================================ picking
+const raycaster=new THREE.Raycaster();
+function pickAtom(e){
+  if(!ATOMS)return;
+  const rect=renderer.domElement.getBoundingClientRect();
+  const ndc=new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+  raycaster.setFromCamera(ndc,camera);
+  const meshes=molecule.children.filter(c=>c.isInstancedMesh&&c.userData.pickable);
+  let best=null,bestDist=Infinity;
+  for(const m of meshes){const hits=raycaster.intersectObject(m);
+    if(hits.length&&hits[0].distance<bestDist){bestDist=hits[0].distance;best={mesh:m,id:hits[0].instanceId};}}
+  const box=document.getElementById('pick');
+  if(best){const a=best.mesh.userData.pickable[best.id];
+    if(MEASURE_MODE){addMeasurePick(a);return;}
+    if(SELECT_REP){addSelectPick(a);return;}
+    box.style.display='block';
+    box.innerHTML=`<b>${a.resn}${a.resi}</b> · ${a.name} (${a.elem})<br>chain ${a.chain} · index ${a.idx}${a.beta?` · β ${a.beta.toFixed(1)}`:''}${a.ss?` · SS ${a.ss}`:''}`;
+  } else box.style.display='none';
+}
+
+// build a rep selection interactively by clicking atoms, per PICK_MODE.
+function addSelectPick(a){
+  if(PICK_MODE==='bond'){
+    // click two bonded (or any two) atoms -> select that atom pair (the bond)
+    BOND_PICK.push(a.idx);
+    if(BOND_PICK.length>=2){
+      SELECT_BUF.push('idx:'+BOND_PICK[0]);SELECT_BUF.push('idx:'+BOND_PICK[1]);
+      const bonded=BONDS&&BONDS.some(([x,y])=>(x===BOND_PICK[0]&&y===BOND_PICK[1])||(x===BOND_PICK[1]&&y===BOND_PICK[0]));
+      toast(bonded?'Bond selected.':'Atom pair selected (not directly bonded).');
+      BOND_PICK=[];
+    } else { toast('Click the second atom of the bond.'); return; }
+  } else {
+    let key;
+    if(PICK_MODE==='atom') key='idx:'+a.idx;
+    else if(PICK_MODE==='chain') key='chain:'+a.chain;
+    else key='res:'+a.chain+':'+a.resi; // residue (default)
+    const i=SELECT_BUF.indexOf(key);
+    if(i>=0)SELECT_BUF.splice(i,1); else SELECT_BUF.push(key); // toggle
+  }
+  // compose selection string from the buffer
+  if(!SELECT_BUF.length){SELECT_REP.sel='none';}
+  else{
+    const idxs=[],chains=new Set(),resByChain={};
+    for(const k of SELECT_BUF){
+      if(k.startsWith('idx:'))idxs.push(+k.slice(4));
+      else if(k.startsWith('chain:'))chains.add(k.slice(6));
+      else{const [,c,r]=k.split(':');(resByChain[c]=resByChain[c]||[]).push(+r);}
+    }
+    const parts=[];
+    if(idxs.length)parts.push('index '+[...new Set(idxs)].sort((x,y)=>x-y).join(' '));
+    for(const c of chains)parts.push('chain '+c);
+    for(const [c,rs] of Object.entries(resByChain))
+      parts.push(`(chain ${c} and resid ${[...new Set(rs)].sort((x,y)=>x-y).join(' ')})`);
+    SELECT_REP.sel=parts.join(' or ');
+  }
+  compileRep(SELECT_REP);renderReps();buildAllReps();
+}
+
+// ============================================================ MEASUREMENT (M3)
+let MEASURE_MODE=false, measurePicks=[], measurements=[];
+let SELECT_REP=null, SELECT_BUF=[]; // interactive selection picking for a rep
+let PICK_MODE='residue', BOND_PICK=[];
+function vAtom(a){return new THREE.Vector3(a.x-CENTER.x,a.y-CENTER.y,a.z-CENTER.z);}
+function addMeasurePick(a){
+  measurePicks.push(a);
+  const need=MEASURE_KIND==='distance'?2:MEASURE_KIND==='angle'?3:4;
+  if(measurePicks.length>=need){commitMeasurement(measurePicks.slice(0,need));measurePicks=[];}
+  else flashPick(a);
+}
+function flashPick(a){const s=new THREE.Mesh(new THREE.SphereGeometry(0.5,12,12),
+  new THREE.MeshBasicMaterial({color:0x2f6fb0}));s.position.copy(vAtom(a));s.userData.flash=1;measureGroup.add(s);}
+function commitMeasurement(picks){
+  // clear flash markers
+  measureGroup.children.filter(c=>c.userData.flash).forEach(c=>measureGroup.remove(c));
+  let label='',value=0;
+  const tag=a=>`${a.resn}${a.resi}:${a.name}`;
+  if(MEASURE_KIND==='distance'){value=vAtom(picks[0]).distanceTo(vAtom(picks[1]));label=`${value.toFixed(2)} Å`;
+    drawMeasureLine(picks.map(vAtom),0x1f9d6b);}
+  else if(MEASURE_KIND==='angle'){const a=vAtom(picks[0]),b=vAtom(picks[1]),c=vAtom(picks[2]);
+    value=b.clone().sub(a).angleTo(b.clone().sub(c))*180/Math.PI;label=`${value.toFixed(1)}°`;drawMeasureLine([a,b,c],0xc08316);}
+  else{const a=vAtom(picks[0]),b=vAtom(picks[1]),c=vAtom(picks[2]),d=vAtom(picks[3]);
+    value=dihedralDeg(a,b,c,d);label=`${value.toFixed(1)}°`;drawMeasureLine([a,b,c,d],0x8b4bb0);}
+  measurements.push({kind:MEASURE_KIND,atoms:picks.map(tag),value:value.toFixed(2),label});
+  renderMeasureList();
+}
+function drawMeasureLine(pts,color){
+  const g=new THREE.BufferGeometry().setFromPoints(pts);
+  const ln=new THREE.Line(g,new THREE.LineDashedMaterial({color,dashSize:0.4,gapSize:0.25,linewidth:2}));
+  ln.computeLineDistances();measureGroup.add(ln);
+  // endpoints
+  for(const p of pts){const s=new THREE.Mesh(new THREE.SphereGeometry(0.35,10,10),new THREE.MeshBasicMaterial({color}));s.position.copy(p);measureGroup.add(s);}
+}
+let MEASURE_KIND='distance';
+function renderMeasureList(){
+  const el=document.getElementById('measure-list');if(!el)return;
+  const ic={distance:'D',angle:'A',dihedral:'φ'};
+  el.innerHTML = measurements.length
+    ? measurements.map(m=>
+        `<div class="mitem"><span class="mtag">${m.atoms.join(' · ')}</span><span class="mval">${m.label}</span></div>`).join('')
+    : '<div class="mempty">No measurements yet — pick atoms in the viewport.</div>';
+  const act=document.getElementById('measure-actions');if(act)act.style.display=measurements.length?'flex':'none';
+}
+function clearMeasurements(){measurements=[];measurePicks=[];
+  [...measureGroup.children].forEach(c=>measureGroup.remove(c));renderMeasureList();}
+function exportMeasureCSV(){
+  if(!measurements.length){toast('No measurements to export.');return;}
+  let csv='kind,atoms,value\n';
+  for(const m of measurements)csv+=`${m.kind},"${m.atoms.join(' - ')}",${m.value}\n`;
+  downloadBlob(new Blob([csv],{type:'text/csv'}),'webvmd_measurements.csv');
+}
+
+// ============================================================ DOCKING (binder import + manual dock)
+const ACIDIC_RES=new Set(['ASP','GLU']);const BASIC_RES=new Set(['ARG','LYS','HIS']);
+// atomic masses (u) for true center-of-mass rotation anchor
+const ATOMIC_MASS={H:1.008,C:12.011,N:14.007,O:15.999,F:18.998,P:30.974,S:32.06,
+  CL:35.45,BR:79.904,I:126.90,NA:22.99,K:39.098,MG:24.305,CA:40.078,FE:55.845,ZN:65.38,
+  MN:54.938,CU:63.546,DEFAULT:12.0};
+function centerOfMass(atoms){
+  let mx=0,my=0,mz=0,M=0;
+  for(const a of atoms){const m=ATOMIC_MASS[a.elem]||ATOMIC_MASS.DEFAULT;mx+=a.x*m;my+=a.y*m;mz+=a.z*m;M+=m;}
+  return M?new THREE.Vector3(mx/M,my/M,mz/M):new THREE.Vector3();
+}
+function addBinder(binderAtoms,name){
+  if(!ATOMS){ // no protein yet — just load it as the structure
+    hasBinder=false;setStructure(binderAtoms);return;
+  }
+  const off=ATOMS.length;
+  const objId=OBJECTS.length;
+  const chainId=String.fromCharCode(90-(objId-1)); // Z, Y, X… for each binder
+  let bx=0,by=0,bz=0;for(const a of binderAtoms){bx+=a.x;by+=a.y;bz+=a.z;}
+  bx/=binderAtoms.length;by/=binderAtoms.length;bz/=binderAtoms.length;
+  // place each new binder offset to one side so it's visible, not buried
+  const startShift={x:CENTER.x+EXT.x*0.6+(objId-1)*8-bx, y:CENTER.y-by, z:CENTER.z-bz};
+  for(const a of binderAtoms){
+    a.idx=off+a.idx; a.binder=true; a.obj=objId;
+    a.x+=startShift.x; a.y+=startShift.y; a.z+=startShift.z;
+    a.lx=a.x; a.ly=a.y; a.lz=a.z; // local frame = initial placed position
+    if(!a.resn)a.resn='LIG'; a.chain=chainId; a.het=true;
+  }
+  ATOMS=ATOMS.concat(binderAtoms);
+  // object record with its own transform, anchored at the binder centroid
+  const ctr=centerOfMass(binderAtoms);
+  OBJECTS.push(makeObject('Binder '+objId+' ('+(name||'lig').replace(/\.[^.]+$/,'')+')','binder',ctr));
+  ACTIVE_OBJ=objId; // newly added object becomes the one you move
+  BONDS=inferBonds(ATOMS);
+  STRUCT_HAS_H=ATOMS.some(a=>a.elem==='H');
+  hasBinder=true;
+  addRep('chain '+chainId,'licorice','element',true);
+  recompileAll();renderReps();buildAllReps();
+  document.getElementById('mol-name').textContent=`${ATOMS.length} atoms · ${OBJECTS.length} objects`;
+  document.getElementById('docksec').style.display='';
+  refreshObjectSelector();
+  toast(`${OBJECTS[objId].name} added. Use Move mode to position it.`);
+}
+function objAtoms(i){return ATOMS?ATOMS.filter(a=>(a.obj||0)===i):[];}
+function binderAtoms(){return ATOMS?ATOMS.filter(a=>a.binder):[];}
+function proteinAtoms(){return ATOMS?ATOMS.filter(a=>!a.binder):[];}
+
+// world center of an object (its anchor for rotation), in molecule space
+function objCenterWorld(i){const o=OBJECTS[i];
+  return new THREE.Vector3(o.center.x-CENTER.x+o.pos.x, o.center.y-CENTER.y+o.pos.y, o.center.z-CENTER.z+o.pos.z);}
+function objMeshes(i){return molecule.children.filter(c=>c.userData&&c.userData.obj===i);}
+
+// ---- LIVE transform (fast): update the object's transform + move only its
+// meshes via a group-style matrix; NO rebuild, NO bond inference during drag.
+function liveTranslate(dx,dy,dz,i=ACTIVE_OBJ){
+  const o=OBJECTS[i];o.pos.x+=dx;o.pos.y+=dy;o.pos.z+=dz;
+  for(const m of objMeshes(i)){m.position.x+=dx;m.position.y+=dy;m.position.z+=dz;}
+}
+function liveTranslateVec(v,i=ACTIVE_OBJ){liveTranslate(v.x,v.y,v.z,i);}
+// rotate about an arbitrary world axis (e.g. camera forward) through the centroid
+function liveRotateAxis(axisVec,deg,i=ACTIVE_OBJ){
+  const o=OBJECTS[i];const dq=new THREE.Quaternion().setFromAxisAngle(axisVec.clone().normalize(),deg*Math.PI/180);
+  o.quat.premultiply(dq);const pivot=objCenterWorld(i);
+  for(const m of objMeshes(i)){m.quaternion.premultiply(dq);
+    const p=m.position.clone().sub(pivot).applyQuaternion(dq).add(pivot);m.position.copy(p);}
+}
+function liveRotate(axis,deg,i=ACTIVE_OBJ){
+  const o=OBJECTS[i];const ax=axis==='x'?new THREE.Vector3(1,0,0):axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+  const dq=new THREE.Quaternion().setFromAxisAngle(ax,deg*Math.PI/180);
+  o.quat.premultiply(dq);
+  const pivot=objCenterWorld(i);
+  // rigid rotation about pivot for each tagged mesh: new world transform is
+  // T(pivot)·R·T(-pivot) composed with the mesh's existing transform.
+  for(const m of objMeshes(i)){
+    m.quaternion.premultiply(dq);
+    // p' = dq·(p − pivot) + pivot
+    const p=m.position.clone().sub(pivot).applyQuaternion(dq).add(pivot);
+    m.position.copy(p);
+  }
+}
+// ---- COMMIT: bake the live transform into world coords, re-infer bonds once,
+// rebuild once. Called on drag-end / after nudge buttons.
+function commitObject(i=ACTIVE_OBJ){
+  syncObjectWorld(i);
+  // transform is now baked into local? No: keep transform, set local = current world
+  const o=OBJECTS[i];
+  for(const a of ATOMS){if((a.obj||0)!==i)continue;a.lx=a.x;a.ly=a.y;a.lz=a.z;}
+  o.pos.set(0,0,0);o.quat.identity();
+  // refresh object anchor to the new center of mass
+  o.center.copy(centerOfMass(objAtoms(i)));
+  BONDS=inferBonds(ATOMS);buildAllReps();
+  if(hasBinder&&document.getElementById('dock-live')&&document.getElementById('dock-live').checked)analyzeDocking(true);
+}
+
+// public move/rotate used by nudge buttons (live + immediate commit)
+function moveObject(dx,dy,dz,i=ACTIVE_OBJ){liveTranslate(dx,dy,dz,i);commitObject(i);}
+function rotateObject(axis,deg,i=ACTIVE_OBJ){liveRotate(axis,deg,i);commitObject(i);}
+// backward-compat aliases
+function moveBinder(dx,dy,dz){moveObject(dx,dy,dz,ACTIVE_OBJ);}
+function rotateBinder(axis,deg){rotateObject(axis,deg,ACTIVE_OBJ);}
+function refreshObjectSelector(){
+  const sel=document.getElementById('move-object');if(!sel)return;
+  sel.innerHTML=OBJECTS.map((o,i)=>`<option value="${i}" ${i===ACTIVE_OBJ?'selected':''}>${o.name}</option>`).join('');
+}
+
+// clash + interaction analysis between binder and protein
+function analyzeDocking(quiet){
+  const B=binderAtoms(),P=proteinAtoms();
+  if(!B.length){if(!quiet)toast('No binder loaded.');return;}
+  const cell=4.5,grid=new Map();
+  const key=(x,y,z)=>`${Math.floor(x/cell)},${Math.floor(y/cell)},${Math.floor(z/cell)}`;
+  for(const p of P){const k=key(p.x,p.y,p.z);(grid.get(k)||grid.set(k,[]).get(k)).push(p);}
+  const clashes=[],hbonds=[],salts=[],hydro=[];
+  const clashTol=0.4;
+  for(const b of B){const ci=Math.floor(b.x/cell),cj=Math.floor(b.y/cell),ck=Math.floor(b.z/cell);
+    for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)for(let dk=-1;dk<=1;dk++){
+      const arr=grid.get(`${ci+di},${cj+dj},${ck+dk}`);if(!arr)continue;
+      for(const p of arr){const d=Math.hypot(b.x-p.x,b.y-p.y,b.z-p.z);
+        const rA=BONDI_VDW[b.elem]||1.7,rB=BONDI_VDW[p.elem]||1.7;
+        const overlap=(rA+rB-clashTol)-d;
+        if(overlap>0.3){clashes.push({b,p,d,overlap});continue;}
+        const bChg=(b.elem==='N'||b.elem==='O');
+        const pChg=(p.elem==='N'||p.elem==='O')&&(ACIDIC_RES.has(p.resn)||BASIC_RES.has(p.resn));
+        if(bChg&&pChg&&d<=4.0&&b.elem!==p.elem){salts.push({b,p,d});continue;}
+        if((b.elem==='N'||b.elem==='O')&&(p.elem==='N'||p.elem==='O')&&d>=2.5&&d<=3.5){hbonds.push({b,p,d});continue;}
+        if(b.elem==='C'&&p.elem==='C'&&d>=3.3&&d<=4.5){hydro.push({b,p,d});continue;}
+      }}}
+  drawDockingMarkers(clashes,hbonds,salts,hydro);
+  // summary
+  const el=document.getElementById('dock-result');
+  el.innerHTML=
+    `<div class="dock-stat clash"><span>⚠ Clashes</span><span>${clashes.length}</span></div>`+
+    `<div class="dock-stat hb"><span>H-bonds</span><span>${hbonds.length}</span></div>`+
+    `<div class="dock-stat salt"><span>Salt bridges</span><span>${salts.length}</span></div>`+
+    `<div class="dock-stat hydro"><span>Hydrophobic</span><span>${hydro.length}</span></div>`;
+  window._lastDock={clashes,hbonds,salts,hydro};
+}
+function drawDockingMarkers(clashes,hbonds,salts,hydro){
+  [...interactGroup.children].forEach(c=>interactGroup.remove(c));
+  const showClash=document.getElementById('dock-show-clash').checked;
+  const showInter=document.getElementById('dock-show-inter').checked;
+  const line=(a,b,color,dashed)=>{
+    const g=new THREE.BufferGeometry().setFromPoints([vAtom(a),vAtom(b)]);
+    const m=dashed?new THREE.LineDashedMaterial({color,dashSize:0.35,gapSize:0.2})
+                  :new THREE.LineBasicMaterial({color});
+    const ln=new THREE.Line(g,m);if(dashed)ln.computeLineDistances();interactGroup.add(ln);};
+  const dot=(a,color,r=0.45)=>{const s=new THREE.Mesh(new THREE.SphereGeometry(r,12,12),
+    new THREE.MeshBasicMaterial({color}));s.position.copy(vAtom(a));interactGroup.add(s);};
+  if(showClash)for(const c of clashes){line(c.b,c.p,0xcf4444,false);dot(c.b,0xcf4444,0.55);dot(c.p,0xcf4444,0.55);}
+  if(showInter){
+    for(const h of hbonds){line(h.b,h.p,0x2f9d6b,true);}
+    for(const s of salts){line(s.b,s.p,0x7048c4,true);dot(s.b,0x7048c4,0.4);dot(s.p,0x7048c4,0.4);}
+    for(const h of hydro){line(h.b,h.p,0xc0a020,true);}
+  }
+}
+function exportDockingReport(){
+  const d=window._lastDock;if(!d){toast('Run analysis first.');return;}
+  const tag=a=>`${a.resn}${a.resi||''}:${a.name}`;
+  let s='WebVMD docking analysis\n=======================\n\n';
+  s+=`CLASHES (${d.clashes.length}):\n`;for(const c of d.clashes)s+=`  ${tag(c.b)} — ${tag(c.p)}  ${c.d.toFixed(2)}Å (overlap ${c.overlap.toFixed(2)}Å)\n`;
+  s+=`\nH-BONDS (${d.hbonds.length}):\n`;for(const h of d.hbonds)s+=`  ${tag(h.b)} — ${tag(h.p)}  ${h.d.toFixed(2)}Å\n`;
+  s+=`\nSALT BRIDGES (${d.salts.length}):\n`;for(const x of d.salts)s+=`  ${tag(x.b)} — ${tag(x.p)}  ${x.d.toFixed(2)}Å\n`;
+  s+=`\nHYDROPHOBIC (${d.hydrophobic?d.hydrophobic.length:d.hydro.length}):\n`;for(const h of (d.hydro||[]))s+=`  ${tag(h.b)} — ${tag(h.p)}  ${h.d.toFixed(2)}Å\n`;
+  downloadBlob(new Blob([s],{type:'text/plain'}),'webvmd_docking.txt');
+}
+function clearDocking(){[...interactGroup.children].forEach(c=>interactGroup.remove(c));
+  document.getElementById('dock-result').innerHTML='';window._lastDock=null;}
+
+// ============================================================ VR
+let grips=[],grab=[false,false],pDist=null,pMid=null;
+function setupVR(){for(let i=0;i<2;i++){const g=renderer.xr.getControllerGrip(i);scene.add(g);grips.push(g);
+  const c=renderer.xr.getController(i);
+  c.addEventListener('squeezestart',()=>grab[i]=true);
+  c.addEventListener('squeezeend',()=>{grab[i]=false;pDist=null;pMid=null;});scene.add(c);
+  const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(0,0,-1)]),new THREE.LineBasicMaterial({color:0x2f6fb0}));ln.scale.z=5;c.add(ln);}}
+function updateVR(){if(!renderer.xr.isPresenting)return;
+  if(grab[0]&&grab[1]){const p0=grips[0].position,p1=grips[1].position,d=p0.distanceTo(p1),m=p0.clone().add(p1).multiplyScalar(.5);
+    if(pDist){userScale*=d/pDist;userScale=Math.max(.05,Math.min(30,userScale));applyScale();molecule.position.add(m.clone().sub(pMid));}pDist=d;pMid=m;}
+  else if(grab[0]||grab[1]){const g=grab[0]?grips[0]:grips[1];if(g.userData.prev)molecule.position.add(g.position.clone().sub(g.userData.prev));g.userData.prev=g.position.clone();}
+  else grips.forEach(g=>g.userData.prev=null);}
+
+// ============================================================ toolbar + files
+const drop=document.getElementById('drop'),fileInput=document.getElementById('file');
+document.getElementById('t-load').onclick=()=>fileInput.click();
+drop.onclick=()=>fileInput.click();
+fileInput.onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hot');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hot');}));
+drop.addEventListener('drop',e=>e.dataTransfer.files[0]&&loadFile(e.dataTransfer.files[0]));
+vp.addEventListener('dragover',e=>e.preventDefault());
+vp.addEventListener('drop',e=>{e.preventDefault();e.dataTransfer.files[0]&&loadFile(e.dataTransfer.files[0]);});
+function parseAny(text,fname){
+  const isCIF=/\.cif$|\.mmcif$/i.test(fname)||text.includes('_atom_site.')||text.includes('_chem_comp_atom.');
+  const isXYZ=/\.xyz$/i.test(fname)||(/^\s*\d+\s*\n/.test(text)&&!text.includes('ATOM')&&!isCIF);
+  const isPQR=/\.pqr$/i.test(fname)||(/^(ATOM|HETATM).{20,}\s+[-\d.]+\s+[-\d.]+\s*$/m.test(text)&&!isCIF&&text.split('\n').some(l=>(l.startsWith('ATOM')||l.startsWith('HETATM'))&&l.trim().split(/\s+/).length>=10));
+  const atoms=isCIF?parseCIF(text):isXYZ?parseXYZ(text):isPQR?parsePQR(text):parsePDB(text);
+  return {atoms,kind:isCIF?'cif':isXYZ?'xyz':isPQR?'pqr':'pdb'};
+}
+function loadFile(file,asBinder=false){const r=new FileReader();r.onload=()=>{try{
+  const {atoms,kind}=parseAny(r.result,file.name);
+  if(!atoms.length){toast('No atoms parsed — check the file.');return;}
+  if(asBinder){addBinder(atoms,file.name);return;}
+  if(kind==='pqr')toast('PQR loaded — using file charges & radii.');
+  hasBinder=false;
+  setStructure(atoms);
+}catch(err){toast('Error: '+err.message);}};r.readAsText(file);}
+
+document.getElementById('t-center').onclick=()=>{molecule.position.set(0,0,0);frameView();};
+document.getElementById('t-reset').onclick=()=>{molecule.position.set(0,0,0);userScale=1;sph={theta:0.7,phi:1.15,r:80};applyScale();frameView();};
+document.getElementById('t-snap').onclick=()=>{const a=document.createElement('a');a.download='webvmd_snapshot.png';a.href=renderer.domElement.toDataURL('image/png');a.click();};
+document.getElementById('bgsel').onchange=e=>{scene.background=new THREE.Color(e.target.value);
+  // adjust line/label contrast handled by colors already; keep simple
+};
+document.getElementById('projsel').onchange=e=>{
+  const w=vp.clientWidth,h=vp.clientHeight;
+  if(e.target.value==='ortho'){camera=new THREE.OrthographicCamera(-orthoR*w/h,orthoR*w/h,orthoR,-orthoR,0.05,8000);}
+  else{camera=new THREE.PerspectiveCamera(50,w/h,0.05,8000);}
+  resize();updateCam();};
+document.getElementById('qualsel').onchange=e=>{quality=+e.target.value;buildAllReps();};
+document.getElementById('demo').onclick=()=>loadFile(new File([DEMO],'demo.pdb'));
+
+// ---- view tabs (Viewer / 3D Print) ----
+document.querySelectorAll('.vtab').forEach(tab=>tab.onclick=()=>{
+  const view=tab.getAttribute('data-view');
+  document.querySelectorAll('.vtab').forEach(t=>t.classList.toggle('on',t===tab));
+  document.getElementById('view-viewer').style.display=view==='viewer'?'':'none';
+  document.getElementById('view-print').style.display=view==='print'?'':'none';
+  document.getElementById('insp-title').textContent=view==='print'?'3D Print Export':'Graphical Representations';
+  // turn off measure picking when leaving the viewer
+  if(view!=='viewer'&&MEASURE_MODE){MEASURE_MODE=false;
+    const mt=document.getElementById('measure-toggle');mt.classList.remove('primary');
+    document.getElementById('measure-toggle-label').textContent='Start picking atoms';
+    document.getElementById('hud').style.outline='';}
+});
+
+// ---- measurement + environment UI (M3) ----
+document.querySelectorAll('#measure-kind button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#measure-kind button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');MEASURE_KIND=b.getAttribute('data-k');measurePicks=[];});
+document.getElementById('measure-toggle').onclick=function(){
+  MEASURE_MODE=!MEASURE_MODE;measurePicks=[];
+  document.getElementById('measure-toggle-label').textContent=MEASURE_MODE?'Picking… click atoms':'Start picking atoms';
+  this.classList.toggle('primary',MEASURE_MODE);
+  document.getElementById('hud').style.outline=MEASURE_MODE?'2px solid var(--accent)':'';
+};
+document.getElementById('measure-csv').onclick=exportMeasureCSV;
+document.getElementById('measure-clear').onclick=clearMeasurements;
+document.getElementById('env-go').onclick=()=>{
+  if(!ATOMS){toast('Load a structure first.');return;}
+  const selTxt=document.getElementById('env-sel').value.trim()||'ligand';
+  const dist=parseFloat(document.getElementById('env-dist').value)||5;
+  const sel=`(same residue as (protein within ${dist} of (${selTxt})))`;
+  try{compileSelection(sel);}catch(e){toast('Selection error: '+e.message);return;}
+  addRep(sel,'licorice','restype',true);
+  compileRep(reps[reps.length-1]);reps[reps.length-1].expanded=true;activeRep=reps[reps.length-1];
+  renderReps();buildAllReps();
+  toast(`Highlighted ${reps[reps.length-1]._count} atoms within ${dist}Å of ${selTxt}`);
+};
+
+// ---- binder import + manual move/dock ----
+document.getElementById('t-binder').onclick=()=>{if(!ATOMS){toast('Load a protein first.');return;}document.getElementById('binder-file').click();};
+document.getElementById('binder-file').onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0],true);e.target.value='';};
+document.getElementById('move-object').onchange=e=>{ACTIVE_OBJ=+e.target.value;};
+document.getElementById('dock-toggle').onclick=function(){
+  if(!ATOMS){toast('Load a structure first.');return;}
+  DOCK_MODE=!DOCK_MODE;
+  document.getElementById('dock-toggle-label').textContent=DOCK_MODE?'Exit move mode':'Enter move mode';
+  this.classList.toggle('primary',DOCK_MODE);
+  document.getElementById('dock-hint').style.display=DOCK_MODE?'':'none';
+  document.getElementById('dock-gesture').style.display=DOCK_MODE?'':'none';
+  document.getElementById('dock-nudge').style.display=DOCK_MODE?'':'none';
+  document.getElementById('viewport').style.cursor=DOCK_MODE?(DOCK_GESTURE==='move'?'move':'grab'):'';
+  if(DOCK_MODE){ // moving and other picking modes are mutually exclusive
+    if(MEASURE_MODE){MEASURE_MODE=false;document.getElementById('measure-toggle').classList.remove('primary');
+      document.getElementById('measure-toggle-label').textContent='Start picking atoms';}
+    if(SELECT_REP){SELECT_REP=null;renderReps();}
+    document.getElementById('hud').style.outline='2px solid var(--accent)';
+  } else document.getElementById('hud').style.outline='';
+};
+document.querySelectorAll('#dock-gesture .gbtn').forEach(b=>b.onclick=()=>{
+  DOCK_GESTURE=b.getAttribute('data-g');
+  document.querySelectorAll('#dock-gesture .gbtn').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('viewport').style.cursor=DOCK_GESTURE==='move'?'move':'grab';
+});
+document.querySelectorAll('#dock-nudge [data-rot]').forEach(b=>b.onclick=e=>rotateObject(b.getAttribute('data-rot'),e.shiftKey?-15:15));
+document.querySelectorAll('#dock-nudge [data-mov]').forEach(b=>b.onclick=e=>{
+  const ax=b.getAttribute('data-mov'),d=(e.shiftKey?-0.5:0.5);
+  moveObject(ax==='x'?d:0, ax==='y'?d:0, ax==='z'?d:0);});
+document.getElementById('dock-analyze').onclick=()=>analyzeDocking(false);
+document.getElementById('dock-report').onclick=exportDockingReport;
+document.getElementById('dock-clear').onclick=clearDocking;
+document.getElementById('dock-show-clash').onchange=()=>{if(window._lastDock)analyzeDocking(true);};
+document.getElementById('dock-show-inter').onchange=()=>{if(window._lastDock)analyzeDocking(true);};
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',4000);}
+
+// VR availability
+if(navigator.xr){navigator.xr.isSessionSupported('immersive-vr').then(ok=>{const b=document.getElementById('t-vr');
+  if(ok){b.disabled=false;b.onclick=enterVR;document.getElementById('vrhud').textContent='VR ready';}else b.textContent='No VR';});}
+else document.getElementById('t-vr').textContent='No WebXR';
+let xrSession=null;
+async function enterVR(){if(xrSession){xrSession.end();return;}
+  xrSession=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor']});
+  renderer.xr.setReferenceSpaceType('local-floor');await renderer.xr.setSession(xrSession);
+  setupVR();molecule.position.set(0,1.4,-0.6);applyScale();document.getElementById('t-vr').textContent='Exit VR';
+  xrSession.addEventListener('end',()=>{xrSession=null;document.getElementById('t-vr').textContent='Enter VR';molecule.position.set(0,0,0);applyScale();frameView();});}
+
+// ============================================================ loop
+renderer.setAnimationLoop(()=>{updateVR();renderer.render(scene,camera);});
+resize();updateCam();
+
+// ============================================================ 3D-PRINTING EXPORT ENGINE
+//
+// Collects printable representations into solid geometry, optionally fuses and
+// thickens for strength, reports ACCURATE fused-solid volume via voxel
+// occupancy (overlaps counted once), suggests an optimal print orientation,
+// and exports STL (geometry), per-color STL set, and 3MF (true per-face color).
+
+// ============================================================ CHARGES (M4)
+// Template partial charges (CHARMM-like, charge-balanced so residue net charges
+// equal formal charges — validated). Used when no PQR is provided. If a PQR is
+// loaded, those per-atom charges override these.
+const BACKBONE_Q={N:-0.47,HN:0.31,H:0.31,CA:0.07,HA:0.09,C:0.51,O:-0.51,OXT:-0.51};
+const SIDECHAIN_Q={
+  ASP:{CB:-0.21,CG:0.75,OD1:-0.77,OD2:-0.77},
+  GLU:{CB:-0.21,CG:-0.21,CD:0.75,OE1:-0.665,OE2:-0.665},
+  LYS:{CE:0.21,NZ:-0.30,HZ1:0.363,HZ2:0.363,HZ3:0.364},
+  ARG:{CD:0.20,NE:-0.70,HE:0.44,CZ:0.64,NH1:-0.80,NH2:-0.80,HH11:0.46,HH12:0.46,HH21:0.46,HH22:0.64},
+  HIS:{ND1:-0.36,CE1:0.25,HD1:0.11}, HID:{ND1:-0.36,CE1:0.25,HD1:0.11},
+  SER:{CB:0.05,OG:-0.49,HG:0.44}, THR:{CB:0.14,OG1:-0.55,HG1:0.41},
+  TYR:{CZ:0.11,OH:-0.54,HH:0.43},
+  ASN:{CG:0.55,OD1:-0.55,ND2:-0.62,HD21:0.31,HD22:0.31},
+  GLN:{CD:0.55,OE1:-0.55,NE2:-0.62,HE21:0.31,HE22:0.31},
+  CYS:{SG:-0.23,HG:0.16},
+};
+function templateCharge(a){
+  if(a.pqrCharge!==undefined) return a.pqrCharge;          // PQR wins
+  if(BACKBONE_Q[a.name]!==undefined) return BACKBONE_Q[a.name];
+  const s=SIDECHAIN_Q[a.resn]; if(s&&s[a.name]!==undefined) return s[a.name];
+  return 0.0;
+}
+// Charge-based color: red (−) to white (0) to blue (+), continuous, for surface
+function chargeColorContinuous(q,scale=0.8){
+  const t=Math.max(-1,Math.min(1,q/scale));const c=new THREE.Color();
+  if(t<0)c.setRGB(0.90,0.90*(1+t),0.90*(1+t));else c.setRGB(0.90*(1-t),0.90*(1-t),0.90+0.10*t);
+  return c.getHex();
+}
+function chargeColorHex(resn){ // residue-level quick version (for rep coloring)
+  const q={ASP:-1,GLU:-1,ARG:1,LYS:1,HIS:0.1}[resn]||0;
+  return q>0.5?0x2f6fb0:q<-0.5?0xcf4444:0xc8c8cd;}
+
+// Per-region overrides for print coloring (independent of on-screen rep colors)
+let PRINT_COLORS={proteinColor:0x9aa6c4, ligandColor:0xe08a2b, scheme:'rep'};
+// scheme: 'rep' | 'restype' | 'charge' | 'chain' | 'protein_ligand'
+
+// ============================================================ SURFACE ENGINE (M1)
+// Marching cubes -> watertight manifold fused surface. Validated in Node:
+// overlapping atoms fuse into one closed mesh, every edge shared by 2 faces.
+
+// Exact literature van der Waals radii (Bondi 1964) — Angstrom.
+const BONDI_VDW={H:1.20,C:1.70,N:1.55,O:1.52,F:1.47,P:1.80,S:1.80,CL:1.75,BR:1.85,I:1.98,
+  B:1.92,SI:2.10,SE:1.90,AS:1.85,TE:2.06,NA:2.27,K:2.75,MG:1.73,CA:2.31,FE:1.80,ZN:1.39,
+  MN:1.79,CU:1.40,NI:1.63,CO:1.70,LI:1.82,DEFAULT:1.70};
+const UNITED_VDW={C:1.90,N:1.65,O:1.60,S:1.90,DEFAULT:1.70};
+let STRUCT_HAS_H=false;
+function preciseRadius(a,radiusSet){
+  const E=(a.elem||'').toUpperCase();
+  if(radiusSet==='united'&&!STRUCT_HAS_H&&UNITED_VDW[E])return UNITED_VDW[E];
+  return BONDI_VDW[E]??BONDI_VDW.DEFAULT;
+}
+const SURF_RESOLUTION={low:{h:0.8,smooth:4},medium:{h:0.5,smooth:8},high:{h:0.30,smooth:14},ultra:{h:0.22,smooth:18}};
+
+// Marching cubes worker (validated tables + global-edge-key vertex sharing)
+const MC_WORKER_SRC=`
+${document.getElementById('mc-tritable')?document.getElementById('mc-tritable').textContent:''}
+const edgeTable=new Int32Array([0x0,0x109,0x203,0x30a,0x406,0x50f,0x605,0x70c,0x80c,0x905,0xa0f,0xb06,0xc0a,0xd03,0xe09,0xf00,0x190,0x99,0x393,0x29a,0x596,0x49f,0x795,0x69c,0x99c,0x895,0xb9f,0xa96,0xd9a,0xc93,0xf99,0xe90,0x230,0x339,0x33,0x13a,0x636,0x73f,0x435,0x53c,0xa3c,0xb35,0x83f,0x936,0xe3a,0xf33,0xc39,0xd30,0x3a0,0x2a9,0x1a3,0xaa,0x7a6,0x6af,0x5a5,0x4ac,0xbac,0xaa5,0x9af,0x8a6,0xfaa,0xea3,0xda9,0xca0,0x460,0x569,0x663,0x76a,0x66,0x16f,0x265,0x36c,0xc6c,0xd65,0xe6f,0xf66,0x86a,0x963,0xa69,0xb60,0x5f0,0x4f9,0x7f3,0x6fa,0x1f6,0xff,0x3f5,0x2fc,0xdfc,0xcf5,0xfff,0xef6,0x9fa,0x8f3,0xbf9,0xaf0,0x650,0x759,0x453,0x55a,0x256,0x35f,0x55,0x15c,0xe5c,0xf55,0xc5f,0xd56,0xa5a,0xb53,0x859,0x950,0x7c0,0x6c9,0x5c3,0x4ca,0x3c6,0x2cf,0x1c5,0xcc,0xfcc,0xec5,0xdcf,0xcc6,0xbca,0xac3,0x9c9,0x8c0,0x8c0,0x9c9,0xac3,0xbca,0xcc6,0xdcf,0xec5,0xfcc,0xcc,0x1c5,0x2cf,0x3c6,0x4ca,0x5c3,0x6c9,0x7c0,0x950,0x859,0xb53,0xa5a,0xd56,0xc5f,0xf55,0xe5c,0x15c,0x55,0x35f,0x256,0x55a,0x453,0x759,0x650,0xaf0,0xbf9,0x8f3,0x9fa,0xef6,0xfff,0xcf5,0xdfc,0x2fc,0x3f5,0xff,0x1f6,0x6fa,0x7f3,0x4f9,0x5f0,0xb60,0xa69,0x963,0x86a,0xf66,0xe6f,0xd65,0xc6c,0x36c,0x265,0x16f,0x66,0x76a,0x663,0x569,0x460,0xca0,0xda9,0xea3,0xfaa,0x8a6,0x9af,0xaa5,0xbac,0x4ac,0x5a5,0x6af,0x7a6,0xaa,0x1a3,0x2a9,0x3a0,0xd30,0xc39,0xf33,0xe3a,0x936,0x83f,0xb35,0xa3c,0x53c,0x435,0x73f,0x636,0x13a,0x33,0x339,0x230,0xe90,0xf99,0xc93,0xd9a,0xa96,0xb9f,0x895,0x99c,0x69c,0x795,0x49f,0x596,0x29a,0x393,0x99,0x190,0xf00,0xe09,0xd03,0xc0a,0xb06,0xa0f,0x905,0x80c,0x70c,0x605,0x50f,0x406,0x30a,0x203,0x109,0x0]);
+const cornerOff=[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+const edgeCorners=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+function vInterp(iso,p1,p2,v1,v2){const mu=Math.abs(v2-v1)<1e-9?0.5:(iso-v1)/(v2-v1);return [p1[0]+mu*(p2[0]-p1[0]),p1[1]+mu*(p2[1]-p1[1]),p1[2]+mu*(p2[2]-p1[2])];}
+self.onmessage=function(e){
+  const {ax,ay,az,radii,probe,surfType,h,pad}=e.data;
+  const n=radii.length;
+  let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];
+  const eff=new Float32Array(n);
+  for(let a=0;a<n;a++){eff[a]=radii[a]+((surfType==='sas'||surfType==='ses')?probe:0);
+    if(ax[a]-eff[a]<lo[0])lo[0]=ax[a]-eff[a];if(ay[a]-eff[a]<lo[1])lo[1]=ay[a]-eff[a];if(az[a]-eff[a]<lo[2])lo[2]=az[a]-eff[a];
+    if(ax[a]+eff[a]>hi[0])hi[0]=ax[a]+eff[a];if(ay[a]+eff[a]>hi[1])hi[1]=ay[a]+eff[a];if(az[a]+eff[a]>hi[2])hi[2]=az[a]+eff[a];}
+  for(let d=0;d<3;d++){lo[d]-=pad;hi[d]+=pad;}
+  const nx=Math.ceil((hi[0]-lo[0])/h)+1,ny=Math.ceil((hi[1]-lo[1])/h)+1,nz=Math.ceil((hi[2]-lo[2])/h)+1;
+  const N=nx*ny*nz;
+  if(N>140e6){self.postMessage({error:'Grid too large ('+((N/1e6)|0)+'M). Lower resolution.'});return;}
+  const field=new Float32Array(N).fill(-1e9);
+  for(let a=0;a<n;a++){const cx=ax[a],cy=ay[a],cz=az[a],r=eff[a];
+    const i0=Math.max(0,Math.floor((cx-r-lo[0])/h)),i1=Math.min(nx-1,Math.ceil((cx+r-lo[0])/h));
+    const j0=Math.max(0,Math.floor((cy-r-lo[1])/h)),j1=Math.min(ny-1,Math.ceil((cy+r-lo[1])/h));
+    const k0=Math.max(0,Math.floor((cz-r-lo[2])/h)),k1=Math.min(nz-1,Math.ceil((cz+r-lo[2])/h));
+    for(let i=i0;i<=i1;i++){const x=lo[0]+i*h,dx=x-cx;for(let j=j0;j<=j1;j++){const y=lo[1]+j*h,dy=y-cy;
+      for(let k=k0;k<=k1;k++){const z=lo[2]+k*h,dz=z-cz;const d=r-Math.sqrt(dx*dx+dy*dy+dz*dz);const idx=(i*ny+j)*nz+k;if(d>field[idx])field[idx]=d;}}}
+    if((a&511)===0)self.postMessage({progress:0.45*a/n});}
+  const isoVal=(surfType==='ses')?probe:0.0;
+  const at=(i,j,k)=>field[(i*ny+j)*nz+k];
+  const verts=[],tris=[],vcache=new Map();
+  function edgeVertex(i,j,k,ed){const ca=edgeCorners[ed][0],cb=edgeCorners[ed][1];const a=cornerOff[ca],b=cornerOff[cb];
+    const ai=i+a[0],aj=j+a[1],ak=k+a[2],bi=i+b[0],bj=j+b[1],bk=k+b[2];
+    const ga=(ai*ny+aj)*nz+ak,gb=(bi*ny+bj)*nz+bk;const key=Math.min(ga,gb)*N+Math.max(ga,gb);
+    let id=vcache.get(key);if(id!==undefined)return id;
+    const v=vInterp(isoVal,[lo[0]+ai*h,lo[1]+aj*h,lo[2]+ak*h],[lo[0]+bi*h,lo[1]+bj*h,lo[2]+bk*h],at(ai,aj,ak),at(bi,bj,bk));
+    id=verts.length/3;verts.push(v[0],v[1],v[2]);vcache.set(key,id);return id;}
+  for(let i=0;i<nx-1;i++){for(let j=0;j<ny-1;j++)for(let k=0;k<nz-1;k++){
+    let ci=0;const c0=at(i,j,k),c1=at(i+1,j,k),c2=at(i+1,j+1,k),c3=at(i,j+1,k),c4=at(i,j,k+1),c5=at(i+1,j,k+1),c6=at(i+1,j+1,k+1),c7=at(i,j+1,k+1);
+    if(c0<isoVal)ci|=1;if(c1<isoVal)ci|=2;if(c2<isoVal)ci|=4;if(c3<isoVal)ci|=8;if(c4<isoVal)ci|=16;if(c5<isoVal)ci|=32;if(c6<isoVal)ci|=64;if(c7<isoVal)ci|=128;
+    const em=edgeTable[ci];if(em===0)continue;const ev=new Array(12);
+    for(let ed=0;ed<12;ed++)if(em&(1<<ed))ev[ed]=edgeVertex(i,j,k,ed);
+    const tt=triTable[ci];for(let t=0;tt[t]!==-1;t+=3)tris.push(ev[tt[t]],ev[tt[t+1]],ev[tt[t+2]]);}
+    if((i&7)===0)self.postMessage({progress:0.45+0.45*i/nx});}
+  let occ=0;for(let p=0;p<N;p++)if(field[p]>isoVal)occ++;
+  const volume=occ*h*h*h;
+  const varr=new Float32Array(verts),tarr=new Uint32Array(tris);
+  self.postMessage({verts:varr,tris:tarr,volume,bounds:{lo,hi}},[varr.buffer,tarr.buffer]);
+};`;
+
+// Taubin volume-preserving smoothing on a flat vertex array + index array
+function taubinSmooth(verts,tris,iterations,lambda=0.5,mu=-0.53){
+  const nv=verts.length/3;const adj=Array.from({length:nv},()=>new Set());
+  for(let t=0;t<tris.length;t+=3){const a=tris[t],b=tris[t+1],c=tris[t+2];
+    adj[a].add(b);adj[a].add(c);adj[b].add(a);adj[b].add(c);adj[c].add(a);adj[c].add(b);}
+  const A=adj.map(s=>[...s]);let p=Float32Array.from(verts);
+  const step=f=>{const q=new Float32Array(p.length);
+    for(let v=0;v<nv;v++){const nb=A[v];if(!nb.length){q[v*3]=p[v*3];q[v*3+1]=p[v*3+1];q[v*3+2]=p[v*3+2];continue;}
+      let cx=0,cy=0,cz=0;for(const w of nb){cx+=p[w*3];cy+=p[w*3+1];cz+=p[w*3+2];}cx/=nb.length;cy/=nb.length;cz/=nb.length;
+      q[v*3]=p[v*3]+f*(cx-p[v*3]);q[v*3+1]=p[v*3+1]+f*(cy-p[v*3+1]);q[v*3+2]=p[v*3+2]+f*(cz-p[v*3+2]);}p=q;};
+  for(let i=0;i<iterations;i++){step(lambda);step(mu);}return p;
+}
+// sample a per-vertex color by nearest atom (for color-group export)
+function colorVerticesByNearestAtom(verts,atoms,colorFn){
+  const cell=4.0,grid=new Map();const key=(x,y,z)=>`${Math.floor(x/cell)},${Math.floor(y/cell)},${Math.floor(z/cell)}`;
+  for(const a of atoms){const k=key(a.x,a.y,a.z);(grid.get(k)||grid.set(k,[]).get(k)).push(a);}
+  const nv=verts.length/3;const cols=new Uint32Array(nv);
+  for(let v=0;v<nv;v++){const x=verts[v*3],y=verts[v*3+1],z=verts[v*3+2];
+    const ci=Math.floor(x/cell),cj=Math.floor(y/cell),ck=Math.floor(z/cell);
+    let best=null,bd=Infinity;
+    for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)for(let dk=-1;dk<=1;dk++){
+      const arr=grid.get(`${ci+di},${cj+dj},${ck+dk}`);if(!arr)continue;
+      for(const a of arr){const dx=a.x-x,dy=a.y-y,dz=a.z-z;const d=dx*dx+dy*dy+dz*dz;if(d<bd){bd=d;best=a;}}}
+    if(best===null){let bd2=Infinity;for(const a of atoms){const dx=a.x-x,dy=a.y-y,dz=a.z-z;const d=dx*dx+dy*dy+dz*dz;if(d<bd2){bd2=d;best=a;}}}
+    cols[v]=colorFn(best);}
+  return cols;
+}
+
+function printColorForAtom(a, rep, chains){
+  switch(PRINT_COLORS.scheme){
+    case 'protein_ligand': return a.het?PRINT_COLORS.ligandColor:PRINT_COLORS.proteinColor;
+    case 'restype':{const r=RESTYPE.acidic.has(a.resn)?'acidic':RESTYPE.basic.has(a.resn)?'basic':
+        RESTYPE.polar.has(a.resn)?'polar':PROTEIN_RES.has(a.resn)?'nonpolar':'other';return RESTYPE_COL[r];}
+    case 'charge': return chargeColorContinuous(templateCharge(a));
+    case 'chain': return CHAIN_COLORS[chains.indexOf(a.chain)%CHAIN_COLORS.length];
+    default: return atomColor(a,rep.color,chains,{min:0,max:1}); // 'rep'
+  }
+}
+
+function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+
+// minimal zip (store, no compression) for 3MF — robust and dependency-free
+function makeZip(files){ // files: [{name, data:Uint8Array}]
+  const enc=new TextEncoder();const chunks=[];const central=[];let offset=0;
+  function crc32(u8){let c=~0;for(let i=0;i<u8.length;i++){c^=u8[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xEDB88320&-(c&1));}return ~c>>>0;}
+  for(const f of files){
+    const nameB=enc.encode(f.name);const data=f.data;const crc=crc32(data);
+    const local=new Uint8Array(30+nameB.length);const dv=new DataView(local.buffer);
+    dv.setUint32(0,0x04034b50,true);dv.setUint16(4,20,true);dv.setUint16(6,0,true);dv.setUint16(8,0,true);
+    dv.setUint16(10,0,true);dv.setUint16(12,0,true);dv.setUint32(14,crc,true);
+    dv.setUint32(18,data.length,true);dv.setUint32(22,data.length,true);
+    dv.setUint16(26,nameB.length,true);dv.setUint16(28,0,true);local.set(nameB,30);
+    chunks.push(local,data);
+    const cen=new Uint8Array(46+nameB.length);const cdv=new DataView(cen.buffer);
+    cdv.setUint32(0,0x02014b50,true);cdv.setUint16(4,20,true);cdv.setUint16(6,20,true);
+    cdv.setUint32(16,crc,true);cdv.setUint32(20,data.length,true);cdv.setUint32(24,data.length,true);
+    cdv.setUint16(28,nameB.length,true);cdv.setUint32(42,offset,true);cen.set(nameB,46);
+    central.push(cen);offset+=local.length+data.length;
+  }
+  let cenSize=0;central.forEach(c=>cenSize+=c.length);
+  const end=new Uint8Array(22);const edv=new DataView(end.buffer);
+  edv.setUint32(0,0x06054b50,true);edv.setUint16(8,files.length,true);edv.setUint16(10,files.length,true);
+  edv.setUint32(12,cenSize,true);edv.setUint32(16,offset,true);
+  return new Blob([...chunks,...central,end],{type:'model/3mf'});
+}
+let lastOrient=null;
+
+// Gather the atom set + radii for the printable surface (from visible printable reps)
+function gatherPrintAtoms(){
+  if(!ATOMS){toast('Load a structure first.');return null;}
+  const radiusSet=document.getElementById('print-radiusset')?document.getElementById('print-radiusset').value:'bondi';
+  const idxset=new Set();
+  for(const rep of reps){
+    if(!rep.on||!rep._pred)continue;
+    if(rep.draw==='lines'||rep.draw==='points')continue; // not printable
+    for(const a of ATOMS)if(rep._pred(a))idxset.add(a.idx);
+  }
+  if(!idxset.size){toast('No printable atoms — enable a VDW/CPK/Licorice/Surface/Trace rep.');return null;}
+  const atoms=ATOMS.filter(a=>idxset.has(a.idx));
+  const radii=atoms.map(a=>preciseRadius(a,radiusSet));
+  return {atoms,radii};
+}
+
+// Run marching cubes in a worker -> {verts(Float32 mm-space later), tris(Uint32), volumeA3, bounds}
+let _mcWorker=null;
+function runSurface(atoms,radii,onDone){
+  const resKey=document.getElementById('print-resolution')?document.getElementById('print-resolution').value:'medium';
+  const res=SURF_RESOLUTION[resKey]||SURF_RESOLUTION.medium;
+  const surfType=document.getElementById('print-surftype')?document.getElementById('print-surftype').value:'vdw';
+  const probe=parseFloat(document.getElementById('print-probe')?document.getElementById('print-probe').value:'1.4')||1.4;
+  surfOverlay(true,'Building density grid…',0);
+  const ax=new Float32Array(atoms.length),ay=new Float32Array(atoms.length),az=new Float32Array(atoms.length);
+  atoms.forEach((a,i)=>{ax[i]=a.x;ay[i]=a.y;az[i]=a.z;});
+  if(_mcWorker)_mcWorker.terminate();
+  _mcWorker=new Worker(URL.createObjectURL(new Blob([MC_WORKER_SRC],{type:'text/javascript'})));
+  _mcWorker.onmessage=ev=>{
+    if(ev.data.error){surfOverlay(false);toast(ev.data.error);return;}
+    if(ev.data.progress!==undefined){
+      const p=ev.data.progress; // 0..0.9 from worker
+      surfOverlay(true, p<0.45?'Building density grid…':'Extracting surface (marching cubes)…', p);
+      return;
+    }
+    const verts0=ev.data.verts;const tris=ev.data.tris;const volumeA3=ev.data.volume;
+    _mcWorker.terminate();_mcWorker=null;
+    // Smooth in async chunks so the overlay/progress stays live (no UI freeze).
+    surfOverlay(true,'Smoothing mesh…',0.9);
+    taubinSmoothAsync(verts0,tris,res.smooth,
+      frac=>surfOverlay(true,'Smoothing mesh…',0.9+0.1*frac),
+      verts=>{ surfOverlay(true,'Done',1); setTimeout(()=>surfOverlay(false),250);
+        onDone({verts,tris,volumeA3}); });
+  };
+  _mcWorker.postMessage({ax,ay,az,radii:Float32Array.from(radii),probe,surfType,h:res.h,pad:res.h*3});
+}
+// overlay helper
+function surfOverlay(show,stage,frac){
+  const o=document.getElementById('surf-overlay');if(!o)return;
+  o.style.display=show?'flex':'none';
+  if(stage!==undefined)document.getElementById('surf-stage').textContent=stage;
+  if(frac!==undefined){const pct=Math.round(frac*100);
+    document.getElementById('surf-bar').firstChild.style.width=pct+'%';
+    document.getElementById('surf-pct').textContent=pct+'%';}
+}
+// Non-blocking Taubin smoothing: precompute adjacency, then run iterations in
+// setTimeout-yielded chunks so the progress bar animates and the tab stays responsive.
+function taubinSmoothAsync(verts,tris,iterations,onProg,onDone,lambda=0.5,mu=-0.53){
+  const nv=verts.length/3;const adj=Array.from({length:nv},()=>new Set());
+  for(let t=0;t<tris.length;t+=3){const a=tris[t],b=tris[t+1],c=tris[t+2];
+    adj[a].add(b);adj[a].add(c);adj[b].add(a);adj[b].add(c);adj[c].add(a);adj[c].add(b);}
+  const A=adj.map(s=>[...s]);let p=Float32Array.from(verts);
+  const totalSteps=iterations*2;let step=0;
+  function doStep(f){const q=new Float32Array(p.length);
+    for(let v=0;v<nv;v++){const nb=A[v];if(!nb.length){q[v*3]=p[v*3];q[v*3+1]=p[v*3+1];q[v*3+2]=p[v*3+2];continue;}
+      let cx=0,cy=0,cz=0;for(const w of nb){cx+=p[w*3];cy+=p[w*3+1];cz+=p[w*3+2];}cx/=nb.length;cy/=nb.length;cz/=nb.length;
+      q[v*3]=p[v*3]+f*(cx-p[v*3]);q[v*3+1]=p[v*3+1]+f*(cy-p[v*3+1]);q[v*3+2]=p[v*3+2]+f*(cz-p[v*3+2]);}p=q;}
+  function run(){
+    if(step>=totalSteps){onDone(p);return;}
+    doStep(step%2===0?lambda:mu);step++;
+    onProg(step/totalSteps);
+    setTimeout(run,0); // yield to the event loop so the overlay repaints
+  }
+  setTimeout(run,0);
+}
+
+// orientation on a flat vert array
+function applyOrientationFlat(verts,R){
+  const out=new Float32Array(verts.length);
+  for(let i=0;i<verts.length;i+=3){const x=verts[i],y=verts[i+1],z=verts[i+2];
+    out[i]=R[0][0]*x+R[0][1]*y+R[0][2]*z;out[i+1]=R[1][0]*x+R[1][1]*y+R[1][2]*z;out[i+2]=R[2][0]*x+R[2][1]*y+R[2][2]*z;}
+  return out;
+}
+function boundsFlat(verts){let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];
+  for(let i=0;i<verts.length;i+=3)for(let d=0;d<3;d++){const v=verts[i+d];if(v<lo[d])lo[d]=v;if(v>hi[d])hi[d]=v;}return {lo,hi};}
+function suggestOrientationFlat(verts,tris){
+  const axisRot=(ax,deg)=>{const t=deg*Math.PI/180,c=Math.cos(t),s=Math.sin(t);
+    if(ax==='x')return [[1,0,0],[0,c,-s],[0,s,c]];if(ax==='y')return [[c,0,s],[0,1,0],[-s,0,c]];return [[c,-s,0],[s,c,0],[0,0,1]];};
+  const cands=[{R:[[1,0,0],[0,1,0],[0,0,1]],name:'as-is'}];
+  for(const a of['x','y','z'])for(const d of[90,180,270])cands.push({R:axisRot(a,d),name:`${a}${d}`});
+  const cosT=Math.cos(45*Math.PI/180);let best=null;
+  for(const cand of cands){const v=applyOrientationFlat(verts,cand.R);const {lo,hi}=boundsFlat(v);
+    let overhang=0,contact=0;
+    for(let t=0;t<tris.length;t+=3){const a=tris[t]*3,b=tris[t+1]*3,c=tris[t+2]*3;
+      const ux=v[b]-v[a],uy=v[b+1]-v[a+1],uz=v[b+2]-v[a+2],vx=v[c]-v[a],vy=v[c+1]-v[a+1],vz=v[c+2]-v[a+2];
+      let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const L=Math.hypot(nx,ny,nz);if(L<1e-9)continue;nz/=L;const area=0.5*L;
+      if(-nz>cosT)overhang+=area*(-nz-cosT);const zc=(v[a+2]+v[b+2]+v[c+2])/3;if(zc<lo[2]+0.5)contact+=area;}
+    const height=hi[2]-lo[2];const score=overhang*2-contact+height*0.05;
+    if(!best||score<best.score)best={...cand,score,overhang,contact,height};}
+  return best;
+}
+
+let lastSurface=null;
+document.getElementById('print-orient').onclick=()=>{
+  const g=gatherPrintAtoms();if(!g)return;
+  document.getElementById('orient-result').textContent='Computing surface + orientation…';
+  runSurface(g.atoms,g.radii,surf=>{
+    lastSurface={...surf,atoms:g.atoms};
+    const best=suggestOrientationFlat(surf.verts,surf.tris);lastOrient=best;
+    document.getElementById('orient-result').innerHTML=
+      `Best: <b>${best.name}</b> · overhang ${best.overhang.toFixed(0)} · bed contact ${best.contact.toFixed(0)}. Applied to exports.`;
+  });
+};
+document.getElementById('print-export').onclick=()=>{
+  const g=gatherPrintAtoms();if(!g)return;
+  const sizeMM=parseFloat(document.getElementById('print-size').value)||80;
+  document.getElementById('export-stats').textContent='Computing surface…';
+  runSurface(g.atoms,g.radii,surf=>{
+    let verts=surf.verts;const tris=surf.tris;
+    if(lastOrient)verts=applyOrientationFlat(verts,lastOrient.R);
+    const {lo,hi}=boundsFlat(verts);
+    const extA=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2])||1;
+    const factor=sizeMM/extA;
+    const vmm=new Float32Array(verts.length);
+    for(let i=0;i<verts.length;i+=3){vmm[i]=(verts[i]-lo[0])*factor;vmm[i+1]=(verts[i+1]-lo[1])*factor;vmm[i+2]=(verts[i+2]-lo[2])*factor;}
+    // per-vertex colors
+    const chains=[...new Set(ATOMS.map(a=>a.chain))];
+    const colorFn=a=>a?printColorForAtom(a,{color:'name'},chains):0x999999;
+    const vcols=colorVerticesByNearestAtom(verts,g.atoms,colorFn);
+    const volMM=surf.volumeA3*Math.pow(factor,3);
+    const fmt=document.getElementById('print-format').value;
+    const files=[];const base='webvmd_model';
+    if(fmt==='stl'||fmt==='all') files.push({name:base+'.stl',data:meshToBinarySTL(vmm,tris)});
+    if(fmt==='3mf'||fmt==='all') files.push({name:base+'.3mf',data:meshTo3MF(vmm,tris,vcols)});
+    if(fmt==='percolor'||fmt==='all') for(const f of meshToPerColorSTL(vmm,tris,vcols))files.push(f);
+    files.push({name:base+'_report.txt',data:new TextEncoder().encode(printReport(vmm,tris,volMM,sizeMM,factor,vcols))});
+    // SINGLE ZIP download (fixes multi-download block)
+    const blob=makeZip(files.map(f=>({name:f.name,data:f.data})));
+    downloadBlob(blob,base+'.zip');
+    const grams=(volMM/1000)*1.24*0.2;
+    document.getElementById('export-stats').innerHTML=
+      `✓ Exported <b>${base}.zip</b> (${files.length} files): ${files.map(f=>f.name.split('_').pop()||f.name).join(', ')}.<br>`+
+      `Triangles ${(tris.length/3).toLocaleString()} · watertight surface · fused volume ${(volMM/1000).toFixed(1)} cm³ · ~${grams.toFixed(1)} g PLA @20%.`;
+  });
+};
+
+// ---- mesh exporters (flat vert array + index tris) ----
+function meshToBinarySTL(verts,tris){
+  const nt=tris.length/3;const buf=new ArrayBuffer(84+nt*50);const dv=new DataView(buf);
+  dv.setUint32(80,nt,true);let o=84;
+  for(let t=0;t<tris.length;t+=3){const a=tris[t]*3,b=tris[t+1]*3,c=tris[t+2]*3;
+    const ax=verts[a],ay=verts[a+1],az=verts[a+2],bx=verts[b],by=verts[b+1],bz=verts[b+2],cx=verts[c],cy=verts[c+1],cz=verts[c+2];
+    let nx=(by-ay)*(cz-az)-(bz-az)*(cy-ay),ny=(bz-az)*(cx-ax)-(bx-ax)*(cz-az),nz=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);
+    const L=Math.hypot(nx,ny,nz)||1;nx/=L;ny/=L;nz/=L;
+    dv.setFloat32(o,nx,true);dv.setFloat32(o+4,ny,true);dv.setFloat32(o+8,nz,true);o+=12;
+    dv.setFloat32(o,ax,true);dv.setFloat32(o+4,ay,true);dv.setFloat32(o+8,az,true);o+=12;
+    dv.setFloat32(o,bx,true);dv.setFloat32(o+4,by,true);dv.setFloat32(o+8,bz,true);o+=12;
+    dv.setFloat32(o,cx,true);dv.setFloat32(o+4,cy,true);dv.setFloat32(o+8,cz,true);o+=12;
+    dv.setUint16(o,0,true);o+=2;}
+  return new Uint8Array(buf);
+}
+function meshToPerColorSTL(verts,tris,vcols){
+  // group triangles by majority vertex color
+  const byColor=new Map();
+  for(let t=0;t<tris.length;t+=3){const c=vcols[tris[t]];if(!byColor.has(c))byColor.set(c,[]);byColor.get(c).push(tris[t],tris[t+1],tris[t+2]);}
+  const out=[];for(const [c,idx] of byColor){const hex=('000000'+(c>>>0).toString(16)).slice(-6);
+    out.push({name:`webvmd_model_${hex}.stl`,data:meshToBinarySTL(verts,Uint32Array.from(idx))});}
+  return out;
+}
+function meshTo3MF(verts,tris,vcols){
+  // group triangles by color -> objects, each in a colorgroup
+  const byColor=new Map();
+  for(let t=0;t<tris.length;t+=3){const c=vcols[tris[t]];if(!byColor.has(c))byColor.set(c,[]);byColor.get(c).push(tris[t],tris[t+1],tris[t+2]);}
+  const colors=[...byColor.keys()];
+  const ns='http://schemas.microsoft.com/3dmanufacturing/core/2015/02',mns='http://schemas.microsoft.com/3dmanufacturing/material/2015/02';
+  let xml=`<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" xmlns="${ns}" xmlns:m="${mns}">\n<resources>\n<m:colorgroup id="1">\n`;
+  for(const c of colors){const hex=('000000'+(c>>>0).toString(16)).slice(-6).toUpperCase();xml+=`<m:color color="#${hex}"/>\n`;}
+  xml+=`</m:colorgroup>\n`;let oid=2;const items=[];
+  colors.forEach((c,ci)=>{const idx=byColor.get(c);const remap=new Map();const vs=[];const ts=[];
+    for(const gi of idx){let ni=remap.get(gi);if(ni===undefined){ni=vs.length/3;remap.set(gi,ni);vs.push(verts[gi*3],verts[gi*3+1],verts[gi*3+2]);}ts.push(ni);}
+    xml+=`<object id="${oid}" type="model" pid="1" pindex="${ci}">\n<mesh>\n<vertices>\n`;
+    for(let i=0;i<vs.length;i+=3)xml+=`<vertex x="${vs[i].toFixed(4)}" y="${vs[i+1].toFixed(4)}" z="${vs[i+2].toFixed(4)}"/>\n`;
+    xml+=`</vertices>\n<triangles>\n`;for(let i=0;i<ts.length;i+=3)xml+=`<triangle v1="${ts[i]}" v2="${ts[i+1]}" v3="${ts[i+2]}"/>\n`;
+    xml+=`</triangles>\n</mesh>\n</object>\n`;items.push(oid);oid++;});
+  xml+=`</resources>\n<build>\n`;for(const b of items)xml+=`<item objectid="${b}"/>\n`;xml+=`</build>\n</model>`;
+  const ct=`<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n</Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n<Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n</Relationships>`;
+  const enc=new TextEncoder();
+  // nested 3mf is itself a zip; embed as raw bytes
+  return zipBytes([{name:'[Content_Types].xml',data:enc.encode(ct)},{name:'_rels/.rels',data:enc.encode(rels)},{name:'3D/3dmodel.model',data:enc.encode(xml)}]);
+}
+function printReport(verts,tris,volMM,sizeMM,factor,vcols){
+  const {lo,hi}=boundsFlat(verts);
+  const colorSet=new Set(vcols);
+  let s='WebVMD-Print export report\n==========================\n';
+  s+=`Triangles: ${tris.length/3}\nVertices: ${verts.length/3}\n`;
+  s+=`Bounding box (mm): ${(hi[0]-lo[0]).toFixed(1)} x ${(hi[1]-lo[1]).toFixed(1)} x ${(hi[2]-lo[2]).toFixed(1)}\n`;
+  s+=`Longest side (mm): ${sizeMM}\nScale: ${factor.toFixed(4)} mm/Angstrom\n`;
+  s+=`Fused volume: ${(volMM/1000).toFixed(2)} cm^3\n`;
+  s+=`Est. mass @20% infill PLA: ${((volMM/1000)*1.24*0.2).toFixed(1)} g\n`;
+  s+=`Color groups: ${colorSet.size}\n`;
+  s+=`Surface: marching-cubes, watertight manifold, Taubin-smoothed.\n`;
+  if(lastOrient)s+=`Print orientation: ${lastOrient.name}\n`;
+  return s;
+}
+// raw zip -> Uint8Array (used for nested 3mf inside the outer zip)
+function zipBytes(files){
+  const enc=new TextEncoder();const chunks=[];const central=[];let offset=0;
+  const crc32=u8=>{let c=~0;for(let i=0;i<u8.length;i++){c^=u8[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xEDB88320&-(c&1));}return ~c>>>0;};
+  for(const f of files){const nameB=enc.encode(f.name);const data=f.data;const crc=crc32(data);
+    const local=new Uint8Array(30+nameB.length);const dv=new DataView(local.buffer);
+    dv.setUint32(0,0x04034b50,true);dv.setUint16(4,20,true);dv.setUint32(14,crc,true);dv.setUint32(18,data.length,true);dv.setUint32(22,data.length,true);dv.setUint16(26,nameB.length,true);local.set(nameB,30);
+    chunks.push(local,data);const cen=new Uint8Array(46+nameB.length);const cdv=new DataView(cen.buffer);
+    cdv.setUint32(0,0x02014b50,true);cdv.setUint16(4,20,true);cdv.setUint16(6,20,true);cdv.setUint32(16,crc,true);cdv.setUint32(20,data.length,true);cdv.setUint32(24,data.length,true);cdv.setUint16(28,nameB.length,true);cdv.setUint32(42,offset,true);cen.set(nameB,46);
+    central.push(cen);offset+=local.length+data.length;}
+  let cenSize=0;central.forEach(c=>cenSize+=c.length);const end=new Uint8Array(22);const edv=new DataView(end.buffer);
+  edv.setUint32(0,0x06054b50,true);edv.setUint16(8,files.length,true);edv.setUint16(10,files.length,true);edv.setUint32(12,cenSize,true);edv.setUint32(16,offset,true);
+  const total=offset+cenSize+22;const out=new Uint8Array(total);let p=0;
+  for(const c of chunks){out.set(c,p);p+=c.length;}for(const c of central){out.set(c,p);p+=c.length;}out.set(end,p);
+  return out;
+}
+// repaint on-screen when print color scheme changes (preview)
+function refreshPrintColorUI(){const sel=document.getElementById('print-colorscheme');if(!sel)return;
+  PRINT_COLORS.scheme=sel.value;
+  document.getElementById('pl-colors').style.display=sel.value==='protein_ligand'?'':'none';}
+document.getElementById('print-colorscheme').onchange=refreshPrintColorUI;
+document.getElementById('protein-color').oninput=e=>{PRINT_COLORS.proteinColor=parseInt(e.target.value.slice(1),16);};
+document.getElementById('ligand-color').oninput=e=>{PRINT_COLORS.ligandColor=parseInt(e.target.value.slice(1),16);};
+
+// ============================================================ demo structure (small helix + sheet + ligand)
+const DEMO=`ATOM      1  N   MET A   1      11.104   6.134  -6.504  1.00  0.00           N
+ATOM      2  CA  MET A   1      11.804   6.252  -5.226  1.00  0.00           C
+ATOM      3  C   MET A   1      11.140   5.339  -4.199  1.00  0.00           C
+ATOM      4  O   MET A   1       9.916   5.353  -4.085  1.00  0.00           O
+ATOM      5  CB  MET A   1      13.295   5.940  -5.405  1.00  0.00           C
+ATOM      6  N   GLN A   2      11.951   4.557  -3.487  1.00  0.00           N
+ATOM      7  CA  GLN A   2      11.490   3.638  -2.455  1.00  0.00           C
+ATOM      8  C   GLN A   2      11.819   4.193  -1.074  1.00  0.00           C
+ATOM      9  O   GLN A   2      12.963   4.564  -0.808  1.00  0.00           O
+ATOM     10  CB  GLN A   2      12.140   2.262  -2.630  1.00  0.00           C
+ATOM     11  N   ILE A   3      10.813   4.246  -0.207  1.00  0.00           N
+ATOM     12  CA  ILE A   3      10.953   4.741   1.158  1.00  0.00           C
+ATOM     13  C   ILE A   3      11.069   3.585   2.147  1.00  0.00           C
+ATOM     14  O   ILE A   3      10.155   2.764   2.262  1.00  0.00           O
+ATOM     15  CB  ILE A   3       9.762   5.657   1.500  1.00  0.00           C
+ATOM     16  N   PHE A   4      12.190   3.532   2.867  1.00  0.00           N
+ATOM     17  CA  PHE A   4      12.421   2.474   3.846  1.00  0.00           C
+ATOM     18  C   PHE A   4      12.534   3.049   5.254  1.00  0.00           C
+ATOM     19  O   PHE A   4      13.279   3.998   5.491  1.00  0.00           O
+ATOM     20  CB  PHE A   4      13.683   1.677   3.510  1.00  0.00           C
+ATOM     21  N   LYS A   5      11.799   2.461   6.196  1.00  0.00           N
+ATOM     22  CA  LYS A   5      11.812   2.911   7.585  1.00  0.00           C
+ATOM     23  C   LYS A   5      11.726   1.715   8.529  1.00  0.00           C
+ATOM     24  O   LYS A   5      11.260   0.642   8.142  1.00  0.00           O
+ATOM     25  CB  LYS A   5      10.640   3.862   7.852  1.00  0.00           C
+ATOM     26  CG  LYS A   5      10.622   4.445   9.261  1.00  0.00           C
+ATOM     27  CD  LYS A   5       9.450   5.401   9.467  1.00  0.00           C
+ATOM     28  CE  LYS A   5       9.445   5.987  10.873  1.00  0.00           C
+ATOM     29  NZ  LYS A   5       8.310   6.929  11.070  1.00  0.00           N
+ATOM     30  N   THR A   6      12.176   1.912   9.766  1.00  0.00           N
+ATOM     31  CA  THR A   6      12.142   0.842  10.762  1.00  0.00           C
+ATOM     32  C   THR A   6      12.281   1.413  12.169  1.00  0.00           C
+ATOM     33  O   THR A   6      12.957   2.424  12.379  1.00  0.00           O
+ATOM     34  CB  THR A   6      13.262  -0.181  10.524  1.00  0.00           C
+ATOM     35  N   LEU A   7      11.636   0.770  13.141  1.00  0.00           N
+ATOM     36  CA  LEU A   7      11.691   1.215  14.531  1.00  0.00           C
+ATOM     37  C   LEU A   7      12.019   0.044  15.456  1.00  0.00           C
+ATOM     38  O   LEU A   7      11.581  -1.087  15.227  1.00  0.00           O
+ATOM     39  CB  LEU A   7      10.360   1.846  14.952  1.00  0.00           C
+ATOM     40  N   GLU A   8      12.792   0.316  16.508  1.00  0.00           N
+ATOM     41  CA  GLU A   8      13.166  -0.715  17.474  1.00  0.00           C
+ATOM     42  C   GLU A   8      13.241  -0.124  18.879  1.00  0.00           C
+ATOM     43  O   GLU A   8      13.744   0.985  19.078  1.00  0.00           O
+ATOM     44  CB  GLU A   8      14.504  -1.361  17.092  1.00  0.00           C
+ATOM     45  CG  GLU A   8      14.949  -2.468  18.045  1.00  0.00           C
+ATOM     46  CD  GLU A   8      16.299  -3.069  17.666  1.00  0.00           C
+ATOM     47  OE1 GLU A   8      16.713  -2.916  16.493  1.00  0.00           O
+ATOM     48  OE2 GLU A   8      16.934  -3.694  18.548  1.00  0.00           O
+HETATM   49  C1  LIG A 101      15.500   3.000  10.000  1.00  0.00           C
+HETATM   50  C2  LIG A 101      16.700   3.500  10.500  1.00  0.00           C
+HETATM   51  N1  LIG A 101      17.600   2.700  11.100  1.00  0.00           N
+HETATM   52  O1  LIG A 101      16.900   4.800  10.400  1.00  0.00           O
+HETATM   53  CL1 LIG A 101      14.300   4.000   9.300  1.00  0.00          CL
+END`;
+loadFile(new File([DEMO],'demo.pdb'));
+</script>
+</body>
+</html>
